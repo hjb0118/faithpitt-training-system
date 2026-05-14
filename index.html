@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>培训管理系统</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="/css/main.css">
+</head>
+<body>
+
+<div class="lp" id="loginPage">
+  <div class="lc">
+    <div class="lh">
+      <img src="/uploads/2+685+.png" alt="凡小孔" style="width:52px;height:52px;border-radius:50%;object-fit:contain;margin-bottom:6px;box-shadow:0 2px 10px rgba(168,217,74,0.3)" onerror="this.style.display='none'">
+      <img src="/uploads/logo.png" alt="凡碧诗" style="width:52px;height:auto;margin-bottom:4px" onerror="this.style.display='none'">
+      <h1>培训管理系统</h1>
+      <p style="margin-top:4px;font-size:12px;letter-spacing:0.5px;opacity:0.8">毛孔净又细 · 素颜有底气</p>
+    </div>
+    <div class="lb" id="loginForm">
+      <div class="fg"><label>用户名</label><input id="loginUser" placeholder="请输入用户名"></div>
+      <div class="fg"><label>密码</label><input id="loginPwd" type="password" placeholder="请输入密码"></div>
+      <button class="bp" id="loginBtn">登录</button>
+      <div class="ln" id="serverInfo" style="display:none"></div>
+    </div>
+    <div class="lb" id="registerForm" style="display:none">
+      <div style="font-size:13px;color:#999;margin-bottom:14px">首次使用，请创建管理员账号</div>
+      <div class="fg"><label>用户名 *</label><input id="regUser" placeholder="如：admin"></div>
+      <div class="fg"><label>密码 *</label><input id="regPwd" type="password" placeholder="设置密码"></div>
+      <div class="fg"><label>姓名 *</label><input id="regName" placeholder="你的真实姓名"></div>
+      <div class="fg"><label>部门</label><input id="regDept" placeholder="如：人事部"></div>
+      <button class="bp" id="regBtn">创建账号</button>
+      <button class="bp bp2" id="backLogin">返回登录</button>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="appLayout">
+  <div id="sidebarOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:49" onclick="toggleSidebar()"></div>
+  <aside class="sb" id="mainSidebar">
+    <div class="sb-b" style="display:flex;flex-direction:column;align-items:center;padding:20px 12px 16px;gap:6px">
+      <img src="/uploads/指脸IP.png" alt="凡小孔" style="width:56px;height:56px;border-radius:50%;object-fit:cover;box-shadow:0 2px 10px rgba(0,0,0,0.15);border:2px solid rgba(255,255,255,0.3)" onerror="this.style.display='none'">
+      <div style="text-align:center">
+        <h2 style="font-size:17px;margin-bottom:2px;text-shadow:0 1px 2px rgba(0,0,0,0.2)">凡碧诗</h2>
+        <span style="font-size:10px;letter-spacing:1px;opacity:0.85;font-family:'Barlow',sans-serif">FAITHPITT</span>
+      </div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:2px;letter-spacing:0.5px">培训管理系统</div>
+    </div>
+    <nav class="sb-n" id="sideNav"></nav>
+    <div style="padding:12px 14px;border-top:1px solid rgba(255,255,255,0.15)">
+      <div class="ui" id="userInfo"></div>
+      <button class="lob" id="logoutBtn">退出登录</button>
+    </div>
+    <div style="text-align:center;padding:8px 12px 14px;font-size:10px;color:rgba(255,255,255,0.5);letter-spacing:0.5px">毛孔净又细 · 素颜有底气</div>
+    <div style="text-align:center;padding:0 12px 16px;font-size:10px;color:rgba(255,255,255,0.3)">v26 · 凡碧诗培训管理系统</div>
+  </aside>
+  <div class="mn">
+    <div style="display:none;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid #e5e3df" id="mobileTopBar">
+      <button onclick="toggleSidebar()" style="background:none;border:none;font-size:22px;cursor:pointer;padding:4px;color:#333">☰</button>
+      <img src="/uploads/logo.png" alt="凡碧诗" style="height:22px;width:auto;filter:brightness(0) invert(1);opacity:0.9" onerror="this.style.display='none'">
+      <span style="font-weight:700;font-size:16px">凡碧诗培训</span>
+    </div>
+    <div class="reminder-bar" id="reminderBar"><span id="reminderText"></span><button class="bt bts" id="dismissReminder">知道了</button></div>
+
+<div class="pg" id="p-my">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding:16px;background:linear-gradient(135deg,var(--primary-bg),var(--bg));border-radius:16px;border:1px solid var(--primary-light)">
+        <img src="/uploads/6126.png" alt="凡小孔" style="width:56px;height:56px;border-radius:50%;object-fit:contain;box-shadow:0 4px 12px rgba(168,217,74,0.3)" onerror="this.style.display='none'">
+        <div>
+          <div class="pt" id="welcomeTitle" style="margin-bottom:0">我的培训记录</div>
+          <div class="pd" id="welcomeMsg"></div>
+        </div>
+      </div>
+      <!-- Tab切换 -->
+      <div style="display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #e5e3df">
+        <button class="bt" id="myTabPending" style="border-radius:6px 6px 0 0;border-bottom:none;margin-bottom:-2px;font-weight:600;background:var(--primary-dark);color:#0D1A08">待处理</button>
+        <button class="bt" id="myTabDone" style="border-radius:6px 6px 0 0;border-bottom:none;margin-bottom:-2px;background:#fff;color:#666">已完成</button>
+      </div>
+      <div class="tw"><table><thead><tr><th>培训项目</th><th>类型</th><th>日期</th><th>费用</th><th>状态</th><th>操作</th></tr></thead><tbody id="myTb"></tbody></table></div>
+    </div>
+
+    <div class="pg" id="p-apply">
+      <div class="pt">提交培训申请</div>
+      <div class="pd">填写外出学习申请，提交后HR将审批</div>
+      <div id="applyDraftBar" style="display:none;background:#edf3fc;border:1px solid #b8d4f0;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#2c6fb5;align-items:center;gap:10px">
+        <span><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> 已自动恢复上次未提交的草稿</span>
+        <button class="bt bts" id="clearDraftBtn" style="color:#999;border-color:#ccc">清空草稿</button>
+      </div>
+      <div class="cd"><div class="fgd">
+        <datalist id="dl-org"></datalist>
+        <datalist id="dl-loc"></datalist>
+        <div class="fg fl"><label>培训项目 *</label><input id="a-proj" placeholder="课程/峰会/工作坊名称"></div>
+        <div class="fg"><label>培训机构</label><input id="a-org" placeholder="主办方" list="dl-org"></div>
+        <div class="fg"><label>培训类型</label><select id="a-type"><option value="">请选择</option><option>内部培训</option><option>外部课程</option><option>在线学习</option><option>行业峰会</option><option>工作坊</option><option>认证考试</option><option>其他</option></select></div>
+        <div class="fg"><label>培训日期 *</label><input id="a-date" type="date"></div>
+        <div class="fg"><label>预计费用(元) *</label><input id="a-cost" type="number" placeholder="含学费、差旅、住宿"></div>
+        <div class="fg"><label>培训地点</label><input id="a-loc" placeholder="城市/线上" list="dl-loc"></div>
+        <div class="fg fl"><label>学习目标 * <small style="color:#999;font-weight:400">（不少于20字，描述要解决的具体问题）</small></label><textarea id="a-goal" rows="3" placeholder="示例：目前部门客户流失率较高，希望通过学习客户留存策略，找到适合我们业务场景的挽回方案"></textarea></div>
+        <div class="fg fl"><label>应用场景 * <small style="color:#999;font-weight:400">（培训后将在哪些具体工作中应用）</small></label><textarea id="a-scene" rows="2" placeholder="示例：客户回访流程优化、新员工带教、月度运营复盘"></textarea></div>
+        <div class="fg fl"><label>承诺产出 * <small style="color:#999;font-weight:400">（至少2项，需具体可衡量）</small></label><textarea id="a-out" rows="4" placeholder="1. 学习总结报告（含3个核心收获+1个可落地改进点）&#10;2. 部门内分享PPT（30分钟，覆盖本部门全员）&#10;3. 改进方案（含执行计划和预期效果）"></textarea></div>
+        <div class="fg fl" style="background:#f8f8f6;border-radius:8px;padding:12px;border:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">填写质量自检</div>
+          <div id="apply-check" style="font-size:12px;color:#999;line-height:1.8">
+            <span id="chk-proj">○ 培训项目已填写</span><br>
+            <span id="chk-date">○ 培训日期已选择</span><br>
+            <span id="chk-cost">○ 预计费用已填写</span><br>
+            <span id="chk-goal">○ 学习目标不少于20字</span><br>
+            <span id="chk-scene">○ 应用场景已填写</span><br>
+            <span id="chk-out">○ 承诺产出至少2项</span>
+          </div>
+        </div>
+        <div class="fa"><button class="bt" id="applyCancel">取消</button><button class="bt btp" id="applySubmit">提交申请</button></div>
+      </div></div>
+    </div>
+
+    <div class="pg" id="p-summary">
+      <div class="pt">提交学习总结</div>
+      <div class="pd">学完一周内提交总结报告和行动计划</div>
+      <div class="cd"><div class="fgd">
+        <input type="hidden" id="s-id">
+        <div class="fg fl"><label>关联培训</label><div id="s-proj" style="font-weight:600;padding:4px 0"></div></div>
+        <div class="fg fl" style="background:#fdf5eb;border-radius:8px;padding:12px;border:1px solid #e6c88a;margin-bottom:0">
+          <div style="font-size:12px;font-weight:600;color:#8a6d2b;margin-bottom:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg> 当初填写的学习目标（供参考）</div>
+          <div id="s-orig-goal" style="font-size:13px;color:#555;white-space:pre-wrap;line-height:1.6"></div>
+        </div>
+        <div class="fg fl" style="background:#f0f7ff;border-radius:8px;padding:12px;border:1px solid #b8d4f0;margin-bottom:0">
+          <div style="font-size:12px;font-weight:600;color:#2c6fb5;margin-bottom:6px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> 当初承诺的产出（供对照）</div>
+          <div id="s-orig-out" style="font-size:13px;color:#555;white-space:pre-wrap;line-height:1.6"></div>
+        </div>
+        <div class="fg fl"><label>① 本次培训最大的3个收获是什么？ *</label><textarea id="s-gain" rows="4" placeholder="收获1：&#10;收获2：&#10;收获3："></textarea></div>
+        <div class="fg fl"><label>② 培训前你对这个领域的了解程度？ *</label><select id="s-before"><option value="">请选择</option><option value="1">1 - 完全不了解</option><option value="2">2 - 略有耳闻</option><option value="3">3 - 有一定基础</option><option value="4">4 - 比较熟悉</option><option value="5">5 - 非常精通</option></select></div>
+        <div class="fg fl"><label>③ 培训后你觉得提升了多少？ *</label><select id="s-after"><option value="">请选择</option><option value="1">1 - 几乎没提升</option><option value="2">2 - 有一点提升</option><option value="3">3 - 明显提升</option><option value="4">4 - 大幅提升</option><option value="5">5 - 质的飞跃</option></select></div>
+        <div class="fg fl"><label>④ 学到的内容打算怎么用到工作中？ *</label><textarea id="s-plan" rows="4" placeholder="具体场景 + 预期效果"></textarea></div>
+        <div class="fg fl"><label>⑤ 30天后怎么验证你用了？</label><textarea id="s-met" rows="2" placeholder="可衡量的指标，如：完成X个方案、效率提升X%"></textarea></div>
+        <div class="fg fl"><label>⑥ 需要公司/领导提供什么支持？</label><textarea id="s-support" rows="2" placeholder="如：时间、资源、协作等"></textarea></div>
+        <div class="fg fl"><label>上传附件</label><input type="file" id="s-file" multiple><div class="file-list" id="s-files"></div></div>
+                <!-- 30天自评表单（默认隐藏，由JS控制显示） -->
+        <div id="self30-section" style="display:none;margin-top:24px;padding-top:24px;border-top:2px dashed var(--border)">
+          <div style="font-size:16px;font-weight:700;color:var(--primary);margin-bottom:16px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> 30天行动自评</div>
+          <div style="background:linear-gradient(135deg,#EFF6FF,#E0F2FE);border:1px solid #BFDBFE;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#1E40AF;line-height:1.7">
+            请对照当初的「30天行动计划」如实填写。HR会查看你的自评并进行确认回访。
+          </div>
+          <div class="fg fl"><label>① 当初的行动计划完成情况如何？ *</label><textarea id="s30-plan-status" rows="3" placeholder="对照当初承诺的计划，逐项说明完成情况"></textarea></div>
+          <div class="fg fl"><label>② 实际应用到工作中的具体案例？ *</label><textarea id="s30-practice" rows="3" placeholder="举1-2个实际应用的例子"></textarea></div>
+          <div class="fg fl"><label>③ 遇到了哪些困难或挑战？</label><textarea id="s30-difficulty" rows="2" placeholder="如实描述即可，有助于HR提供支持"></textarea></div>
+          <div class="fg fl"><label>④ 需要什么支持或资源？</label><textarea id="s30-need" rows="2" placeholder="如：时间、工具、协作等"></textarea></div>
+          <div class="fg fl"><label>⑤ 对这次培训的总体评价</label><select id="s30-rating"><option value="">请选择</option><option>非常满意</option><option>比较满意</option><option>一般</option><option>不太满意</option><option>很不满意</option></select></div>
+        </div>
+        <div class="fa"><button class="bt" id="sumCancel">返回我的记录</button><button class="bt btp" id="sumSubmit">提交总结</button><button class="bt" id="self30Submit" style="display:none;background:var(--success);color:#fff;border-color:var(--success)">提交30天自评</button></div>
+      </div></div>
+    </div>
+
+    <div class="pg" id="p-todos">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px">
+        <div class="pt" style="margin-bottom:0">本周待办</div>
+        <button class="bt bts" id="quickReportBtn"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> 培训报告</button>
+      </div>
+      <div class="pd" style="margin-bottom:12px">需要你处理的培训相关事项</div>
+      <div id="todoList"></div>
+    </div>
+
+    <div class="pg" id="p-profile">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px">
+        <div class="pt" style="margin-bottom:0">个人成长档案</div>
+        <button class="bt bts" id="hrExportReportBtn" style="display:none"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> 导出培训报告</button>
+      </div>
+      <div class="pd">每位员工的培训投入与成长轨迹</div>
+      <div class="cd"><div class="cd-t">选择员工</div><div class="cd-s">查看该员工的培训投入与成长轨迹</div><div class="ft"><select id="pf-emp"><option value="">选择员工</option></select></div></div>
+      <div id="profileContent"></div>
+    </div>
+
+    <div class="pg" id="p-notif">
+      <div class="pt">消息通知</div>
+      <div class="pd">HR对你的反馈和状态更新</div>
+      <div id="notifList"></div>
+    </div>
+
+    <div class="pg" id="p-dash">
+      <div class="pt">数据看板</div>
+      <div class="pd">培训投入与产出的全局视图</div>
+      <!-- HR专有：待处理快捷卡片 -->
+      <div id="dashPendingCards" style="display:none;margin-bottom:16px"></div>
+      <div class="sr" id="statsRow"></div>
+      <div class="cd" id="metricsCard" style="display:none"><div class="cd-t" style="margin-bottom:10px">效率指标</div><div id="metricsRow" style="display:flex;gap:24px;flex-wrap:wrap"></div></div>
+      <div class="cd"><div class="cd-t">月度培训费用</div><div class="cd-s">近6个月费用趋势 <button class="bt bts" id="toggleYear" style="margin-left:8px">切换年度对比</button></div><div class="bar-chart" id="monthChart"></div></div>
+      <div class="cd" id="yearChartCard" style="display:none"><div class="cd-t">年度对比</div><div class="cd-s">今年 vs 去年 同期费用</div><div class="bar-chart" id="yearChart"></div></div>
+      <div class="cd"><div class="cd-t">培训 ROI 分析</div><div class="cd-s">各部门/类型 的投入产出比（仅统计已通过的记录）</div><div id="roiContent"></div></div>
+      <div class="cd"><div class="cd-t">部门费用分布</div><div class="cd-s">各部门培训投入占比</div><div class="bar-chart" id="deptChart"></div></div>
+      <div class="cd"><div class="cd-t">培训类型分布</div><div class="cd-s">各类培训数量统计</div><div class="bar-chart" id="typeChart"></div></div>
+      <div class="cd"><div class="cd-t">闭环概览</div><div class="cd-s">每笔培训从申请到评估的完成进度</div>
+        <div class="tw"><table><thead><tr><th>姓名</th><th>部门</th><th>项目</th><th>费用</th><th>申请</th><th>总结</th><th>30天</th><th>90天</th><th>闭环</th></tr></thead><tbody id="dashTb"></tbody></table></div>
+      </div>
+      <div class="cd"><div class="cd-t">各部门完成率</div><div class="cd-s">今年各部门培训申请数、通过数及通过率（仅统计已通过及后续状态）</div>
+        <div class="tw"><table><thead><tr><th>部门</th><th>申请数</th><th>已完成数</th><th>进行中</th><th>完成率</th></tr></thead><tbody id="deptRateTb"></tbody></table></div>
+      </div>
+    </div>
+
+    <div class="pg" id="p-all">
+      <div class="pt">所有培训记录</div>
+      <div class="pd">查看、审批、管理所有员工的培训记录</div>
+      <div class="ft">
+        <input placeholder="搜索..." id="f-q">
+        <select id="f-dept"><option value="">全部部门</option></select>
+        <select id="f-st"><option value="">全部状态</option><option>待审批</option><option>已通过</option><option>已驳回</option><option>学习中</option><option>总结已提交</option><option>待评审</option><option>30天已回访</option><option>已完成</option></select>
+        <input type="date" id="f-from" title="开始日期">
+        <span style="font-size:12px;color:#999">至</span>
+        <input type="date" id="f-to" title="结束日期">
+        <label style="font-size:12px;cursor:pointer;white-space:nowrap;color:#999" title="显示已归档记录">
+          <input type="checkbox" id="f-archived" style="width:auto;vertical-align:middle;margin-right:3px">归档
+        </label>
+        <button class="bt btp" id="addBtn">+ 新增</button>
+        <button class="bt" id="exportBtn">导出CSV</button>
+      </div>
+      <div class="batch-bar" id="batchBar">
+        <span id="batchCount">已选 0 条</span>
+        <button class="bt bts btp" data-batch="已通过">批量通过</button>
+        <button class="bt bts btd" data-batch="已驳回">批量驳回</button>
+        <button class="bt bts" data-batch="已完成">批量完成</button>
+        <button class="bt bts" id="batchCancel">取消选择</button>
+      </div>
+      <div class="tw"><table><thead><tr><th><input type="checkbox" id="chkAll" class="chk"></th><th>ID</th><th>姓名</th><th>部门</th><th>项目</th><th>类型</th><th>日期</th><th>费用</th><th>状态</th><th>操作</th></tr></thead><tbody id="allTb"></tbody></table></div>
+    </div>
+
+    <div class="pg" id="p-log">
+      <div class="pt">操作日志</div>
+      <div class="pd">系统中所有操作的时间线记录</div>
+      <div class="ft">
+        <input placeholder="搜索..." id="l-q">
+        <input type="date" id="l-from" title="开始日期">
+        <span style="font-size:12px;color:#999">至</span>
+        <input type="date" id="l-to" title="结束日期">
+      </div>
+      <div class="tw"><table><thead><tr><th>时间</th><th>操作人</th><th>操作</th><th>详情</th></tr></thead><tbody id="logTb"></tbody></table></div>
+      <div class="pg-ctrl" id="logPager">
+        <button class="bt" id="logPrev" disabled>&lt; 上一页</button>
+        <span id="logPageInfo">第 1 页，共 1 页</span>
+        <button class="bt" id="logNext" disabled>下一页 &gt;</button>
+      </div>
+    </div>
+
+    <div class="pg" id="p-users">
+      <div class="pt">用户管理</div>
+      <div class="pd">管理系统登录账号</div>
+      <div class="ft">
+        <button class="bt btp" id="addUserBtn">+ 新增用户</button>
+        <button class="bt" id="importUsersBtn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg> 批量导入CSV</button>
+        <a id="downloadTplBtn" href="#" class="bt" style="text-decoration:none"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> 下载导入模板</a>
+      </div>
+      <div id="importTips" style="display:none;background:#f0f7ff;border:1px solid #b8d4f0;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:13px;color:#2c6fb5"></div>
+      <div class="tw"><table><thead><tr><th>用户名</th><th>姓名</th><th>角色</th><th>部门</th><th>操作</th></tr></thead><tbody id="userTb"></tbody></table></div>
+
+      <!-- 部门管理（合并区块） -->
+      <div class="cd" style="margin-top:20px">
+        <div class="cd-t">部门管理</div>
+        <div class="cd-s">维护部门名称，员工提交申请时可从下拉菜单选择</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px">
+          <input id="dept-input" placeholder="输入新部门名称" style="flex:1;padding:8px 10px;border:1.5px solid #ddd;border-radius:8px;font-size:14px">
+          <button class="bt btp" id="deptAddBtn">+ 添加</button>
+        </div>
+        <div id="deptList"></div>
+      </div>
+    </div>
+
+    <div class="pg" id="p-set">
+      <div class="pt">系统设置</div>
+      <div class="pd">修改密码、数据备份等</div>
+      <div class="cd" id="set-pwd">
+        <div class="cd-t">修改密码</div>
+        <div class="fgd" style="max-width:380px">
+          <div class="fg fl"><label>当前密码</label><input id="oldPwd" type="password" placeholder="请输入当前密码"></div>
+          <div class="fg fl"><label>新密码</label><input id="newPwd" type="password" placeholder="至少6位"></div>
+          <div class="fg fl"><label>确认新密码</label><input id="newPwd2" type="password" placeholder="再次输入新密码"></div>
+          <div class="fa"><button class="bt btp" id="changePwdBtn">确认修改</button></div>
+        </div>
+      </div>
+      <div class="cd" id="set-backup">
+        <div class="cd-t">数据备份与恢复</div>
+        <div class="cd-s">备份自动保存在服务器 <code style="font-size:11px;background:#f5f5f3;padding:1px 5px;border-radius:3px">backups/</code> 目录，支持随时恢复</div>
+        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <button class="bt btp" id="backupBtn">立即备份</button>
+          <button class="bt" id="refreshBackupsBtn" style="color:#666">刷新列表</button>
+        </div>
+        <div id="backupResult" style="margin-bottom:10px;font-size:13px;color:#999"></div>
+        <div id="backupList" style="display:none">
+          <div style="font-size:13px;font-weight:600;color:#555;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid #eee">可用备份</div>
+          <div id="backupItems"></div>
+        </div>
+      </div>
+      <div class="cd" id="set-autostart">
+        <div class="cd-t">开机自动启动</div>
+        <div class="cd-s">通过 Windows 任务计划程序实现，完全后台运行，开机自动启动服务</div>
+        <div style="margin-top:10px;padding:10px;background:var(--primary-bg);border:1px solid var(--primary-light);border-radius:var(--radius-md);font-size:13px;color:var(--text-secondary);line-height:1.8">
+          <b style="color:var(--primary)">手动配置方法：</b><br>
+          1. 打开文件夹：<code style="background:#fff;padding:1px 4px;border-radius:3px">C:\Users\PC\Desktop\培训系统\</code><br>
+          2. 右键 <b>启用开机自启.bat</b> → 以管理员身份运行<br>
+          3. 重启电脑后服务将自动启动
+        </div>
+      </div>
+      <div class="cd" id="set-report">
+        <div class="cd-t">导出培训报告</div>
+        <div class="cd-s">生成一份可打印的培训报告，包含统计数据、待办事项、完整记录，适合存档或汇报使用</div>
+        <button class="bt btp" id="exportReportBtn"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> 生成培训报告</button>
+      </div>
+      <div class="cd" id="set-status">
+        <div class="cd-t">服务器状态</div>
+        <div style="font-size:14px;line-height:2">
+          <div>服务器：<code id="serverUrl" style="background:#f5f5f3;padding:2px 6px;border-radius:4px"></code></div>
+          <div>状态：<span id="connStatus" style="font-weight:600"></span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── 培训日历 ─── -->
+    <div class="pg" id="p-cal">
+      <div class="pt">培训日历</div>
+      <div class="pd">按月查看培训安排，直观了解培训分布</div>
+      <div class="cd">
+        <div class="cal-nav">
+          <button class="bt" id="calPrev">◀ 上月</button>
+          <div class="cal-nav-title" id="calTitle"></div>
+          <button class="bt" id="calNext">下月 ▶</button>
+        </div>
+        <div class="cal-header">
+          <div class="cal-hday">日</div><div class="cal-hday">一</div><div class="cal-hday">二</div>
+          <div class="cal-hday">三</div><div class="cal-hday">四</div><div class="cal-hday">五</div><div class="cal-hday">六</div>
+        </div>
+        <div class="cal-grid" id="calGrid"></div>
+        <div style="margin-top:12px;display:flex;gap:12px;flex-wrap:wrap;font-size:12px">
+          <span><span style="display:inline-block;width:10px;height:10px;background:var(--warning-bg);border:1px solid var(--warning);border-radius:2px;vertical-align:middle;margin-right:3px"></span>待审批</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:var(--success-bg);border:1px solid var(--success);border-radius:2px;vertical-align:middle;margin-right:3px"></span>已通过</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:var(--info-bg);border:1px solid var(--info);border-radius:2px;vertical-align:middle;margin-right:3px"></span>学习中/待评审</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:var(--danger-bg);border:1px solid var(--danger);border-radius:2px;vertical-align:middle;margin-right:3px"></span>已驳回</span>
+          <span><span style="display:inline-block;width:10px;height:10px;background:var(--bg);border:1px solid var(--border);border-radius:2px;vertical-align:middle;margin-right:3px"></span>已完成</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── 通知设置 ─── -->
+    <div class="pg" id="p-notifset">
+      <div class="pt">通知设置</div>
+      <div class="pd">配置企业微信群机器人推送培训通知</div>
+      <div class="cd">
+        <div class="cd-t">企业微信Webhook</div>
+        <div style="margin-bottom:12px">
+          <label style="font-size:13px;color:#666;display:block;margin-bottom:6px">Webhook地址</label>
+          <input id="webhook-url" type="text" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=xxx" style="width:100%;padding:10px 12px;border:1.5px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box">
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <label class="sw" style="position:relative;display:inline-block;width:44px;height:24px">
+            <input id="webhook-enabled" type="checkbox" style="opacity:0;width:0;height:0">
+            <span style="position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:#ccc;border-radius:24px;transition:.3s"></span>
+            <span style="position:absolute;content:'';height:18px;width:18px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></span>
+          </label>
+          <span style="font-size:13px;color:#333">启用微信通知</span>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button class="bt btp" id="webhook-save" style="flex:1">保存设置</button>
+          <button class="bt btsec" id="webhook-test" style="flex:1">发送测试</button>
+        </div>
+        <div id="webhook-msg" style="margin-top:12px;font-size:13px;padding:10px;border-radius:6px;display:none"></div>
+      </div>
+      <div class="cd">
+        <div class="cd-t">通知类型说明</div>
+        <div class="notif-item"><span class="notif-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></span><div><strong>新培训申请</strong><p>员工提交培训申请时通知HR</p></div></div>
+        <div class="notif-item"><span class="notif-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span><div><strong>审批结果</strong><p>申请通过/驳回时通知员工</p></div></div>
+        <div class="notif-item"><span class="notif-icon"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></span><div><strong>总结已提交</strong><p>员工提交学习总结时通知HR</p></div></div>
+      </div>
+    </div>
+
+    <div class="pg" id="p-guide">
+      <div class="guide-page">
+        <div class="pt">使用指南</div>
+        <div class="pd">培训价值追踪系统的完整操作流程</div>
+        <div class="guide-note"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> 注意：第一次使用的用户需要完成初始化设置，后续使用仅需登录即可。</div>
+
+        <!-- 四阶段闭环 -->
+        <div class="cd">
+          <div class="cd-t">核心理念：四阶段闭环</div>
+          <div class="cd-s" style="margin-bottom:16px">培训不是"花钱听课"，而是"投资人才"。每次培训都应形成完整闭环。</div>
+          <div class="progress-steps" style="margin-bottom:0">
+            <div class="progress-step done"><div class="progress-step-icon">1</div><div class="progress-step-label">学习前<br><small style="color:#999;font-weight:400">定目标</small></div></div>
+            <div class="progress-step done"><div class="progress-step-icon">2</div><div class="progress-step-label">学习后<br><small style="color:#999;font-weight:400">交总结</small></div></div>
+            <div class="progress-step done"><div class="progress-step-icon">3</div><div class="progress-step-label">30天后<br><small style="color:#999;font-weight:400">查行动</small></div></div>
+            <div class="progress-step done"><div class="progress-step-icon">4</div><div class="progress-step-label">90天后<br><small style="color:#999;font-weight:400">评效果</small></div></div>
+          </div>
+        </div>
+
+        <!-- 操作步骤详解 -->
+        <div class="cd">
+          <div class="cd-t" style="font-size:16px">操作步骤详解</div>
+          <div class="guide-timeline" style="margin-top:20px">
+            <div class="guide-tl-item done">
+              <div class="guide-tl-dot"></div>
+              <div class="guide-tl-title">第一步：外出学习申请（学习前）</div>
+              <div class="guide-tl-desc">
+                员工/高管申请外出学习时，填写《外出学习申请表》。<br>
+                <strong>关键字段：</strong>学习目标（必须具体）、承诺产出（必须可衡量）、预算金额。<br>
+                <strong>审批要求：</strong>上级审批时要审核目标是否具体，产出是否可交付。目标写"提升能力"的一律打回。<br>
+                <strong>为什么重要：</strong>这是后续追踪的基准线。没有目标就没法衡量效果。
+              </div>
+            </div>
+            <div class="guide-tl-item done">
+              <div class="guide-tl-dot"></div>
+              <div class="guide-tl-title">第二步：学习总结报告（学习后一周内）</div>
+              <div class="guide-tl-desc">
+                学完回来后一周内提交《学习总结报告》。<br>
+                <strong>必须包含：</strong>核心收获3-5点、与目标对比、30天行动计划、内部分享。<br>
+                <strong>内部分享：</strong>强制要求学完做一次部门分享（哪怕15分钟），一人学多人受益。<br>
+                <strong>制度保障：</strong>不提交总结的，下次外出学习申请不予审批。
+              </div>
+            </div>
+            <div class="guide-tl-item current">
+              <div class="guide-tl-dot"></div>
+              <div class="guide-tl-title">第三步：30天行动回访（学习后30天）</div>
+              <div class="guide-tl-desc">
+                HR主动回访，对照当初的行动计划核查执行情况。<br>
+                <strong>核心问题：</strong>做了没有？做了哪些？效果如何？没做的原因是什么？<br>
+                <strong>注意：</strong>如果行动计划本身不合理（后来发现不可行），这不怪员工，但要记录原因，为后续选派培训提供参考。
+              </div>
+            </div>
+            <div class="guide-tl-item">
+              <div class="guide-tl-dot"></div>
+              <div class="guide-tl-title">第四步：90天效果评估（学习后90天）</div>
+              <div class="guide-tl-desc">
+                由直属上级 + HR 共同评估培训效果。<br>
+                <strong>评估维度：</strong>业务指标变化、工作行为变化、知识转化情况、综合评分（1-5分）。<br>
+                <strong>产出：</strong>形成可量化的培训ROI数据，为年度培训预算和选派策略提供依据。
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 常见问题 -->
+        <div class="cd">
+          <div class="cd-t" style="font-size:16px">常见问题</div>
+          <div class="guide-faq" style="margin-top:16px">
+            <div class="guide-faq-item">
+              <div class="guide-faq-q">Q: 员工说"我就是去开阔眼界的"，怎么追踪？</div>
+              <div class="guide-faq-a">A: 在申请阶段就堵住这个口。"开阔眼界"不是目标，申请表里要求填写具体目标。如果确实无法量化（如行业峰会），至少要求产出一份行业趋势报告并在部门分享。</div>
+            </div>
+            <div class="guide-faq-item">
+              <div class="guide-faq-q">Q: 高管不愿意填表怎么办？</div>
+              <div class="guide-faq-a">A: 由HR协助填写，高管只需口述即可。关键是高管要带头做内部分享，下面的人才会重视。</div>
+            </div>
+            <div class="guide-faq-item">
+              <div class="guide-faq-q">Q: 30天回访发现没执行，怎么处理？</div>
+              <div class="guide-faq-a">A: 不是惩罚，是了解原因。是计划不合理？是工作太忙？还是根本没当回事？原因不同，对策不同。记录下来，为后续优化提供数据。</div>
+            </div>
+            <div class="guide-faq-item">
+              <div class="guide-faq-q">Q: 表格太复杂，推行不下去怎么办？</div>
+              <div class="guide-faq-a">A: 先用最简版：只保留"学习目标""学习总结""30天回访"三个核心字段。跑通流程后再逐步增加维度。制度不在复杂，在于执行。</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="mo" id="modalBg">
+  <div class="md"><div class="mh"><h3 id="mTitle"></h3><button class="mx" id="modalClose">x</button></div><div class="mb" id="mBody"></div></div>
+</div>
+<div class="tt" id="toast"></div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>

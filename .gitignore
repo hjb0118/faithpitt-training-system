@@ -1,0 +1,32 @@
+# 依赖
+node_modules/
+
+# 数据文件（包含用户数据，不提交）
+data.json
+tokens.json
+
+# 日志
+*.log
+server.log
+
+# 备份目录
+backups/
+
+# 上传的附件
+uploads/
+
+# 备份文件
+*.bak
+*.bak.*
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# 环境变量
+.env
+.env.local
