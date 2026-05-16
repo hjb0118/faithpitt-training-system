@@ -18,6 +18,8 @@ const WECOM = {
   corpId: 'ww7133ea1ef30964de',
   agentId: '1000155',
   secret: '3_g-CefXpktPK3UhUko49Qi7grP_nK-oQFJTZTP4mh8',
+  callbackToken: '6lrcDmGP1nh2i2An83DhS5JcWal5eI',
+  encodingAESKey: 'flGXRz814dbcOE3jLgRgv3bljSZ1WtqqiKjWb48Ix9a',
   getTokenUrl: function() {
     return 'https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=' + this.corpId + '&corpsecret=' + this.secret;
   },
@@ -125,7 +127,7 @@ var LAN_ORIGIN = LAN_IP ? 'http://' + LAN_IP + ':3000' : null;
 var ALLOWED_ORIGINS = new Set([
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-  'https://nested-context-transition-aids.trycloudflare.com', // Cloudflare Tunnel 外网访问
+  'http://47.96.158.178:3000', // 阿里云外网访问
 ]);
 if (LAN_ORIGIN) {
   ALLOWED_ORIGINS.add(LAN_ORIGIN);
@@ -312,6 +314,88 @@ var server = http.createServer(function(req, res) {
   res.setHeader('Access-Control-Allow-Credentials', 'true');
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
+  // ─── 企业微信消息验证 & 回调（接收消息服务器URL） ───
+  if (pathname === '/wecom_hook') {
+    var wecomHook = function() {
+      // AES-256-CBC 加解密
+      var _key = Buffer.from(WECOM.encodingAESKey + '=', 'base64');
+      var _iv = _key.slice(0, 16);
+      function _sha1(args) {
+        return crypto.createHash('sha1').update(args.sort().join('')).digest('hex');
+      }
+      function _decrypt(encrypted) {
+        var decipher = crypto.createDecipheriv('aes-256-cbc', _key, _iv);
+        decipher.setAutoPadding(false);
+        var buf = Buffer.concat([decipher.update(encrypted, 'base64'), decipher.final()]);
+        // 去除PKCS7填充
+        var pad = buf[buf.length - 1];
+        if (pad < 1 || pad > 32) pad = 0;
+        buf = buf.slice(0, buf.length - pad);
+        // 格式: 16字节随机串(4字节长度) + 明文长度(4字节网络字节序) + 明文 + CorpID
+        var msgLen = buf.readUInt32BE(16);
+        var msg = buf.slice(20, 20 + msgLen).toString('utf-8');
+        return msg;
+      }
+      function _encrypt(text) {
+        var random = crypto.randomBytes(16);
+        var textBuf = Buffer.from(text, 'utf-8');
+        var corpBuf = Buffer.from(WECOM.corpId, 'utf-8');
+        var msgLen = Buffer.alloc(4);
+        msgLen.writeUInt32BE(textBuf.length, 0);
+        var raw = Buffer.concat([random, msgLen, textBuf, corpBuf]);
+        // PKCS7填充到32字节的倍数
+        var blockSize = 32;
+        var padLen = blockSize - (raw.length % blockSize);
+        var padBuf = Buffer.alloc(padLen, padLen);
+        raw = Buffer.concat([raw, padBuf]);
+        var cipher = crypto.createCipheriv('aes-256-cbc', _key, _iv);
+        cipher.setAutoPadding(false);
+        return Buffer.concat([cipher.update(raw), cipher.final()]).toString('base64');
+      }
+
+      if (req.method === 'GET') {
+        // URL验证：解密 echostr 并返回
+        var q = parsed.query;
+        var signature = q.msg_signature || '';
+        var timestamp = q.timestamp || '';
+        var nonce = q.nonce || '';
+        var echostr = q.echostr || '';
+        var devSignature = _sha1([WECOM.callbackToken, timestamp, nonce, echostr]);
+        if (signature !== devSignature) {
+          console.log('[企微Hook] GET签名验证失败');
+          res.writeHead(403); res.end('Signature mismatch'); return;
+        }
+        try {
+          var reply = _decrypt(echostr);
+          console.log('[企微Hook] URL验证成功');
+          res.setHeader('Content-Type', 'text/plain');
+          res.end(reply);
+        } catch(e) {
+          console.log('[企微Hook] 解密echostr失败:', e.message);
+          res.writeHead(500); res.end('Decrypt failed'); return;
+        }
+        return;
+      }
+
+      if (req.method === 'POST') {
+        // 接收企微推送的消息/事件
+        var body = '';
+        req.on('data', function(chunk) { body += chunk; });
+        req.on('end', function() {
+          console.log('[企微Hook] 收到POST回调:', body.substring(0, 200));
+          res.setHeader('Content-Type', 'application/json');
+          res.end('{"errcode":0,"errmsg":"ok"}');
+          // TODO: 后续可在此解析消息体，处理事件回调
+        });
+        return;
+      }
+
+      res.writeHead(405); res.end('Method Not Allowed'); return;
+    };
+    wecomHook();
+    return;
+  }
+
   // ─── 企业微信 OAuth 回调 ───
   if (pathname === '/wecom/callback') {
     var wecomCode = parsed.query.code || '';
@@ -408,7 +492,13 @@ var server = http.createServer(function(req, res) {
     if (fs.existsSync(fpath)) {
       var ext = path.extname(fname);
       var fileTypes = { '.pdf': 'application/pdf', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.doc': 'application/msword', '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
-      res.writeHead(200, { 'Content-Type': fileTypes[ext] || 'application/octet-stream' });
+      // 可预览的文件类型使用 inline，其他使用 attachment
+      var previewExts = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'];
+      var disposition = previewExts.includes(ext) ? 'inline' : 'attachment';
+      res.writeHead(200, {
+        'Content-Type': fileTypes[ext] || 'application/octet-stream',
+        'Content-Disposition': disposition + '; filename="' + encodeURIComponent(fname) + '"'
+      });
       res.end(fs.readFileSync(fpath));
     } else {
       res.writeHead(404);
