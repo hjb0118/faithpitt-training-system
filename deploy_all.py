@@ -287,6 +287,9 @@ def server_deploy():
 
 
 def main():
+    # 检查是否是测试模式（跳过等待）
+    no_wait = '--no-wait' in sys.argv
+
     print()
     print('╔' + '═' * 48 + '╗')
     print('║' + '  培训系统 一键部署工具'.center(42) + '║')
@@ -312,8 +315,9 @@ def main():
     print('╚' + '═' * 48 + '╝')
     print()
 
-    print('按任意键退出...')
-    input()
+    if not no_wait:
+        print('按任意键退出...')
+        input()
 
 
 if __name__ == '__main__':
