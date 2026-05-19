@@ -40,3 +40,4 @@ python deploy_all.py
 
 Push 到 `main` 分支后，GitHub Actions 自动同步到云服务器并重启服务。
 # Updated Tue May 19 14:02:13     2026
+# CI/CD test 141637
