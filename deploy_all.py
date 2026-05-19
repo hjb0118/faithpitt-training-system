@@ -8,25 +8,40 @@
 import subprocess
 import os
 import sys
+import json
 import paramiko
 import posixpath
 from datetime import datetime
 
+# ========== 加载本地配置 ==========
+LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(LOCAL_DIR, 'config.local.json')
+
+def load_config():
+    """加载本地配置文件"""
+    config = {}
+    if os.path.exists(CONFIG_FILE):
+        try:
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+        except Exception as e:
+            print(f'  [警告] 配置文件读取失败: {e}')
+    return config
+
+_config = load_config()
+
 # ========== 配置 ==========
 # GitHub
 GITHUB_REPO = 'https://github.com/hjb0118/faithpitt-training-system.git'
-GITHUB_TOKEN = ''  # 留空则使用已有的 git credential
+GITHUB_TOKEN = _config.get('github_token', '')  # 从配置文件读取
 
 # 云服务器
 HOST = '47.96.158.178'
 PORT = 22
 USER = 'root'
-PASS = 'REN01250099q'
+PASS = _config.get('server_pass', 'REN01250099q')  # 从配置文件读取
 REMOTE_DIR = '/root/training-system'
 PM2_APP = 'training-system'
-
-# 本地项目目录（脚本所在目录）
-LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 需要同步的文件/目录（云服务器用）
 SYNC_FILES = ['server.js', 'index.html', 'data.json', 'tokens.json', 'wechat_notify.js']
