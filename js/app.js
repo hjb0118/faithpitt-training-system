@@ -1010,7 +1010,7 @@ function viewSummary(id) {
       h += '<select id="hr30-confirm-result" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px"><option value="">请选择</option><option>已执行</option><option>部分执行</option><option>未执行</option></select></div>';
       h += '<div class="fg fl" style="margin-bottom:12px"><label style="font-size:13px">HR备注</label>';
       h += '<textarea id="hr30-confirm-note" rows="2" placeholder="补充说明或建议" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:13px"></textarea></div>';
-      h += '<button class="bt btp" onclick="doConfirm30Visit(\'' + r.ID + '\')" style="font-size:13px;padding:8px 20px">确认回访</button>';
+      h += '<button class="bt btp" id="hr30-confirm-btn" data-rid="' + r.ID + '" style="font-size:13px;padding:8px 20px">确认回访</button>';
       h += '</div>';
     }
     // 30天回访结果（已确认）
@@ -1053,6 +1053,8 @@ function viewSummary(id) {
     }
     h += '</div>';
     openM('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> ' + esc(r['培训项目']) + ' — 学习总结', h, '840px');
+    var hr30Btn = document.getElementById('hr30-confirm-btn');
+    if (hr30Btn) { hr30Btn.addEventListener('click', function() { doConfirm30Visit(hr30Btn.getAttribute('data-rid')); }); }
   }
 
   // ─── 申请表单质量实时检查 ───
