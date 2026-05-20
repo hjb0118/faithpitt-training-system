@@ -2797,14 +2797,14 @@ function viewSummary(id) {
       // 1. 总结逾期：培训后超过7天，状态仍停留在"学习中"或"已通过"
       if (daysSinceTrain > 7 && (st === '学习中' || st === '已通过')) {
         summaryOverdue.push(r);
-        diagList.push({ type: 'summaryOverdue', severity: 'high', title: '总结逾期未提交', detail: esc(r['培训项目']) + '（' + r['培训日期'] + '，已超' + (daysSinceTrain - 7) + '天）', record: r });
+        diagList.push({ type: 'summaryOverdue', severity: 'high', category: 'flow', title: '总结逾期未提交', detail: esc(r['培训项目']) + '（' + r['培训日期'] + '，已超' + (daysSinceTrain - 7) + '天）', record: r });
       }
 
       // 2. 目标模糊：学习目标包含虚词
       var goal = r['学习目标'] || r['培训目标'] || '';
       if (goal && fuzzyWords.test(goal)) {
         goalVague.push(r);
-        diagList.push({ type: 'goalVague', severity: 'medium', title: '学习目标不够具体', detail: esc(r['培训项目']) + '："' + esc(goal.slice(0, 40)) + (goal.length > 40 ? '...' : '') + '"', record: r });
+        diagList.push({ type: 'goalVague', severity: 'medium', category: 'flow', title: '学习目标不够具体', detail: esc(r['培训项目']) + '："' + esc(goal.slice(0, 40)) + (goal.length > 40 ? '...' : '') + '"', record: r });
       }
 
       // 3. 缺少分享：总结内容或附件中未提及"分享"
@@ -2812,19 +2812,25 @@ function viewSummary(id) {
       var hasShare = /分享|内部分享|部门分享|团队分享|转训/i.test(summary);
       if ((st === '总结已提交' || st === '30天已回访' || st === '已完成') && !hasShare) {
         noShare.push(r);
-        diagList.push({ type: 'noShare', severity: 'medium', title: '未记录内部分享', detail: esc(r['培训项目']) + '：总结中未体现分享动作', record: r });
+        diagList.push({ type: 'noShare', severity: 'medium', category: 'flow', title: '未记录内部分享', detail: esc(r['培训项目']) + '：总结中未体现分享动作', record: r });
       }
 
       // 4. 30天回访缺失：状态到"总结已提交"但没有自评内容
       if (st === '总结已提交' && !r['30天自评内容']) {
         followUpMissing.push(r);
-        diagList.push({ type: 'followUpMissing', severity: 'high', title: '30天回访待启动', detail: esc(r['培训项目']) + '：员工尚未提交30天自评', record: r });
+        diagList.push({ type: 'followUpMissing', severity: 'high', category: 'flow', title: '30天回访待启动', detail: esc(r['培训项目']) + '：员工尚未提交30天自评', record: r });
       }
 
       // 5. 行动计划悬空：有行动计划但30天未确认执行
       if (r['行动计划'] && st !== '已完成' && !r['30天执行']) {
         actionPending.push(r);
-        diagList.push({ type: 'actionPending', severity: 'medium', title: '行动计划未确认落地', detail: esc(r['培训项目']) + '：已提交行动计划，但30天回访未确认执行结果', record: r });
+        diagList.push({ type: 'actionPending', severity: 'medium', category: 'flow', title: '行动计划未确认落地', detail: esc(r['培训项目']) + '：已提交行动计划，但30天回访未确认执行结果', record: r });
+      }
+
+      // 6. 费用效率异常：单次费用超过全公司平均2倍
+      var allAvgCostCalc = ALL_DATA.length > 0 ? ALL_DATA.reduce(function(s, x) { return s + (parseFloat(x['费用']) || 0); }, 0) / ALL_DATA.length : 0;
+      if (parseFloat(r['费用']) > allAvgCostCalc * 2 && allAvgCostCalc > 0) {
+        diagList.push({ type: 'costAnomaly', severity: 'medium', category: 'io', title: '单次费用偏高', detail: esc(r['培训项目']) + '：费用¥' + fmt(r['费用'] || 0) + '，超过公司均值¥' + fmt(allAvgCostCalc) + '的2倍', record: r });
       }
     });
 
@@ -2832,6 +2838,11 @@ function viewSummary(id) {
     var completionRate = records.length > 0 ? Math.round(completedCount / records.length * 100) : 0;
     var self30Rate = self30Total > 0 ? Math.round(self30Done / self30Total * 100) : 0;
     var commitmentRate = commitmentTotal > 0 ? Math.round(commitmentFulfilled / commitmentTotal * 100) : 0;
+
+    // 7. 高投入低产出：累计费用高但完成率低
+    if (records.length >= 3 && completionRate < 50) {
+      diagList.push({ type: 'lowROI', severity: 'high', category: 'io', title: '投入产出失衡', detail: '累计培训费用¥' + fmt(totalCost) + '，但完成率仅' + completionRate + '%，投入产出比偏低' });
+    }
 
     // 找出最常用标签 Top3
     var tagCount = {};
@@ -2850,6 +2861,11 @@ function viewSummary(id) {
     var healthLabel = healthScore >= 80 ? '良好' : healthScore >= 60 ? '待改进' : '需关注';
     var healthColor = healthScore >= 80 ? '#4E9936' : healthScore >= 60 ? '#C4B800' : '#D9534F';
     var healthBg = healthScore >= 80 ? '#E8F5E9' : healthScore >= 60 ? '#FFFDE7' : '#FFEBEE';
+    var grade = healthScore >= 90 ? 'A' : healthScore >= 75 ? 'B' : healthScore >= 60 ? 'C' : 'D';
+    var gradeLabel = { A:'优秀', B:'良好', C:'待改进', D:'需关注' }[grade];
+    var gradeColor = { A:'#4E9936', B:'#6BBF4E', C:'#C4B800', D:'#D9534F' }[grade];
+    var gradeBg = { A:'#E8F5E9', B:'#F1F8E9', C:'#FFFDE7', D:'#FFEBEE' }[grade];
+    var highRiskCount = diagList.filter(function(d) { return d.severity === 'high'; }).length;
 
     // ═══════════════════════════════════════════════════════
     //  三、生成报告 HTML
@@ -2881,14 +2897,36 @@ function viewSummary(id) {
     h += '</div>';
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  LAYER 0.5: 总评卡（一句话结论 + 等级）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    var summaryText = '';
+    if (grade === 'A') summaryText = '该员工培训闭环执行优秀，各项指标均达标';
+    else if (grade === 'B') summaryText = '该员工培训闭环执行良好' + (diagList.length > 0 ? '，有' + diagList.length + '项待改进' : '，指标基本达标');
+    else if (grade === 'C') summaryText = '该员工培训闭环存在薄弱环节，有' + diagList.length + '项问题需关注';
+    else summaryText = '该员工培训闭环存在严重问题' + (highRiskCount > 0 ? '，含' + highRiskCount + '项高风险' : '') + '，需重点跟进';
+    h += '<div style="background:' + gradeBg + ';border-radius:12px;padding:16px 20px;margin-bottom:20px;display:flex;align-items:center;gap:16px;border:1px solid ' + gradeColor + '22">';
+    h += '<div style="flex-shrink:0;width:56px;height:56px;border-radius:50%;background:' + gradeColor + ';color:#fff;display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:800">' + grade + '</div>';
+    h += '<div style="flex:1">';
+    h += '<div style="font-size:15px;font-weight:700;color:#333;margin-bottom:4px">综合评定：<span style="color:' + gradeColor + '">' + gradeLabel + '</span></div>';
+    h += '<div style="font-size:13px;color:#555;line-height:1.6">' + summaryText + '</div>';
+    h += '</div>';
+    h += '<div style="flex-shrink:0;text-align:center">';
+    h += '<div style="font-size:11px;color:#999">健康度</div>';
+    h += '<div style="font-size:24px;font-weight:700;color:' + healthColor + '">' + healthScore + '</div>';
+    h += '</div>';
+    h += '</div>';
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  LAYER 2: 闭环健康诊断（红绿灯）
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     h += '<div style="background:' + healthBg + ';border-radius:12px;padding:16px 20px;margin-bottom:20px;border-left:4px solid ' + healthColor + '">';
     h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
-    h += '<h3 style="font-size:15px;color:#333;font-weight:700"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;color:' + healthColor + '"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>培训闭环健康度：' + healthLabel + '（' + healthScore + '分）</h3>';
+    h += '<h3 style="font-size:15px;color:#333;font-weight:700;display:flex;align-items:center;gap:8px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;color:' + healthColor + '"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>培训闭环健康度：' + healthLabel + '（' + healthScore + '分）<span style="display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:50%;background:' + healthColor + ';color:#fff;font-size:16px;font-weight:800;margin-left:4px">' + grade + '</span></h3>';
     h += '<span style="font-size:12px;color:#999">共发现 ' + diagList.length + ' 项待改进</span>';
     h += '</div>';
     h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">';
+    function dimGrade(rate) { return rate >= 90 ? '优' : rate >= 75 ? '良' : rate >= 60 ? '中' : '差'; }
+    function dimGradeColor(rate) { return rate >= 90 ? '#4E9936' : rate >= 75 ? '#6BBF4E' : rate >= 60 ? '#C4B800' : '#D9534F'; }
     var loopItems = [
       { label: '申请审批', rate: applyRate, color: '#4E9936', icon: 'check' },
       { label: '学习总结', rate: summaryRate, color: summaryRate >= 80 ? '#4E9936' : summaryRate >= 60 ? '#C4B800' : '#D9534F', icon: 'file' },
@@ -2899,6 +2937,7 @@ function viewSummary(id) {
       h += '<div style="background:#fff;border-radius:8px;padding:10px;text-align:center">';
       h += '<div style="font-size:11px;color:#999;margin-bottom:4px">' + li.label + '</div>';
       h += '<div style="font-size:20px;font-weight:700;color:' + li.color + '">' + li.rate + '%</div>';
+      h += '<div style="font-size:10px;color:' + dimGradeColor(li.rate) + ';font-weight:600;margin-top:2px">' + dimGrade(li.rate) + '</div>';
       h += '<div style="width:100%;height:4px;background:#eee;border-radius:2px;margin-top:6px;overflow:hidden">';
       h += '<div style="width:' + li.rate + '%;height:100%;background:' + li.color + ';border-radius:2px"></div>';
       h += '</div></div>';
@@ -2918,23 +2957,86 @@ function viewSummary(id) {
     h += '</div></div>';
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  LAYER 3.5: 对比参照（部门/全公司均值）
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // 计算部门均值
+    var deptRecords = ALL_DATA.filter(function(r) { return r['部门'] === dept; });
+    var deptCompCnt = 0, deptScrSum = 0, deptScrCnt = 0, deptSelf30D = 0, deptSelf30T = 0;
+    deptRecords.forEach(function(r) {
+      if (r['状态'] === '已完成') deptCompCnt++;
+      if (r['评估分数']) { deptScrSum += parseInt(r['评估分数']); deptScrCnt++; }
+      if (r['30天自评内容']) { deptSelf30T++; deptSelf30D++; }
+      else if (r['状态'] === '总结已提交' || r['状态'] === '30天已回访' || r['状态'] === '已完成') { deptSelf30T++; }
+    });
+    var deptCompRate = deptRecords.length > 0 ? Math.round(deptCompCnt / deptRecords.length * 100) : 0;
+    var deptAvgScoreVal = deptScrCnt > 0 ? (deptScrSum / deptScrCnt).toFixed(1) : '-';
+    var deptFollowRate = deptSelf30T > 0 ? Math.round(deptSelf30D / deptSelf30T * 100) : 0;
+
+    // 计算全公司均值
+    var allCompCnt = 0, allScrSum = 0, allScrCnt = 0, allSelf30D = 0, allSelf30T = 0;
+    ALL_DATA.forEach(function(r) {
+      if (r['状态'] === '已完成') allCompCnt++;
+      if (r['评估分数']) { allScrSum += parseInt(r['评估分数']); allScrCnt++; }
+      if (r['30天自评内容']) { allSelf30T++; allSelf30D++; }
+      else if (r['状态'] === '总结已提交' || r['状态'] === '30天已回访' || r['状态'] === '已完成') { allSelf30T++; }
+    });
+    var allCompRate = ALL_DATA.length > 0 ? Math.round(allCompCnt / ALL_DATA.length * 100) : 0;
+    var allAvgScoreVal = allScrCnt > 0 ? (allScrSum / allScrCnt).toFixed(1) : '-';
+    var allFollowRate = allSelf30T > 0 ? Math.round(allSelf30D / allSelf30T * 100) : 0;
+
+    h += '<div style="background:#fff;border-radius:12px;padding:16px 20px;margin-bottom:20px;border:1px solid #e0e0e0">';
+    h += '<h3 style="font-size:14px;color:#666;margin-bottom:14px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></svg> 对比参照</h3>';
+    h += '<table style="width:100%;border-collapse:collapse;font-size:13px">';
+    h += '<thead><tr style="background:#f8f8f8"><th style="padding:8px 12px;text-align:left;border-bottom:2px solid #eee">指标</th><th style="padding:8px 12px;text-align:center;border-bottom:2px solid #eee">' + esc(empName) + '</th><th style="padding:8px 12px;text-align:center;border-bottom:2px solid #eee">' + esc(dept) + '均值</th><th style="padding:8px 12px;text-align:center;border-bottom:2px solid #eee">全公司均值</th></tr></thead><tbody>';
+
+    function cmpRow(label, myVal, deptVal, allVal, isScore) {
+      var myN = parseFloat(myVal) || 0, deptN = parseFloat(deptVal) || 0, allN = parseFloat(allVal) || 0;
+      var deptDiff = myN - deptN, allDiff = myN - allN;
+      var deptColor = deptDiff >= 0 ? '#4E9936' : '#D9534F', allColor = allDiff >= 0 ? '#4E9936' : '#D9534F';
+      var deptArrow = deptDiff > 0 ? ' ↑' : deptDiff < 0 ? ' ↓' : '';
+      var allArrow = allDiff > 0 ? ' ↑' : allDiff < 0 ? ' ↓' : '';
+      var unit = isScore ? '分' : '%';
+      return '<tr>' +
+        '<td style="padding:8px 12px;border-bottom:1px solid #f0f0f0;font-weight:600">' + label + '</td>' +
+        '<td style="padding:8px 12px;text-align:center;border-bottom:1px solid #f0f0f0;font-weight:700">' + myVal + unit + '</td>' +
+        '<td style="padding:8px 12px;text-align:center;border-bottom:1px solid #f0f0f0;color:' + deptColor + '">' + deptVal + unit + '<span style="font-size:11px">' + deptArrow + '</span></td>' +
+        '<td style="padding:8px 12px;text-align:center;border-bottom:1px solid #f0f0f0;color:' + allColor + '">' + allVal + unit + '<span style="font-size:11px">' + allArrow + '</span></td>' +
+        '</tr>';
+    }
+    h += cmpRow('完成率', completionRate, deptCompRate, allCompRate, false);
+    h += cmpRow('平均评分', avgScoreVal !== '-' ? avgScoreVal : '0', deptAvgScoreVal !== '-' ? deptAvgScoreVal : '0', allAvgScoreVal !== '-' ? allAvgScoreVal : '0', true);
+    h += cmpRow('30天跟进率', self30Rate, deptFollowRate, allFollowRate, false);
+    h += '</tbody></table></div>';
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  LAYER 4: 问题诊断清单（新增）
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     if (diagList.length > 0) {
+      var flowDiags = diagList.filter(function(d) { return d.category === 'flow'; }).sort(function(a,b) { return (a.severity==='high'?0:1) - (b.severity==='high'?0:1); });
+      var ioDiags = diagList.filter(function(d) { return d.category === 'io'; }).sort(function(a,b) { return (a.severity==='high'?0:1) - (b.severity==='high'?0:1); });
       h += '<div style="background:#fff;border-radius:12px;padding:16px 20px;margin-bottom:20px;border:1px solid #f0e6e6">';
-      h += '<h3 style="font-size:15px;color:#333;font-weight:700;margin-bottom:14px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;color:#D9534F"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>问题诊断清单</h3>';
-      h += '<div style="display:flex;flex-direction:column;gap:8px">';
-      diagList.forEach(function(d, i) {
-        var badgeColor = d.severity === 'high' ? '#D9534F' : '#C4B800';
-        var badgeBg = d.severity === 'high' ? '#FFEBEE' : '#FFFDE7';
-        h += '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;background:#fafafa;border-radius:8px;border-left:3px solid ' + badgeColor + '">';
-        h += '<span style="flex-shrink:0;font-size:11px;padding:2px 8px;border-radius:4px;background:' + badgeBg + ';color:' + badgeColor + ';font-weight:600">' + (d.severity === 'high' ? '高风险' : '待改进') + '</span>';
-        h += '<div style="flex:1">';
-        h += '<div style="font-size:13px;font-weight:600;color:#333;margin-bottom:2px">' + d.title + '</div>';
-        h += '<div style="font-size:12px;color:#666">' + d.detail + '</div>';
-        h += '</div></div>';
-      });
-      h += '</div></div>';
+      h += '<h3 style="font-size:15px;color:#333;font-weight:700;margin-bottom:14px"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;color:#D9534F"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>问题诊断清单<span style="font-size:12px;font-weight:400;color:#999;margin-left:8px">共 ' + diagList.length + ' 项</span></h3>';
+      function renderDiagGroup(title, items) {
+        if (items.length === 0) return '';
+        var gh = '<div style="margin-bottom:12px">';
+        gh += '<div style="font-size:12px;color:#666;font-weight:600;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #eee">' + title + ' <span style="background:#f0f0f0;padding:1px 6px;border-radius:8px;font-size:11px;color:#999">' + items.length + '</span></div>';
+        gh += '<div style="display:flex;flex-direction:column;gap:6px">';
+        items.forEach(function(d) {
+          var badgeColor = d.severity === 'high' ? '#D9534F' : '#C4B800';
+          var badgeBg = d.severity === 'high' ? '#FFEBEE' : '#FFFDE7';
+          gh += '<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 12px;background:#fafafa;border-radius:8px;border-left:3px solid ' + badgeColor + '">';
+          gh += '<span style="flex-shrink:0;font-size:11px;padding:2px 8px;border-radius:4px;background:' + badgeBg + ';color:' + badgeColor + ';font-weight:600">' + (d.severity === 'high' ? '高风险' : '待改进') + '</span>';
+          gh += '<div style="flex:1">';
+          gh += '<div style="font-size:13px;font-weight:600;color:#333;margin-bottom:2px">' + d.title + '</div>';
+          gh += '<div style="font-size:12px;color:#666">' + d.detail + '</div>';
+          gh += '</div></div>';
+        });
+        gh += '</div></div>';
+        return gh;
+      }
+      h += renderDiagGroup('流程合规', flowDiags);
+      h += renderDiagGroup('投入产出', ioDiags);
+      h += '</div>';
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -3016,6 +3118,8 @@ function viewSummary(id) {
       if (followUpMissing.length > 0) suggestions.push('• <b>启动30天回访</b>：' + followUpMissing.length + ' 条记录已到回访节点，请催促员工提交30天自评');
       if (actionPending.length > 0) suggestions.push('• <b>确认行动计划落地</b>：' + actionPending.length + ' 项行动计划待回访确认，建议安排HR面谈核实');
       if (healthScore < 60) suggestions.push('• <b>整体关注</b>：该员工培训闭环健康度仅 ' + healthScore + ' 分，建议主管重点关注其培训成果转化情况');
+      if (diagList.filter(function(d){return d.type==='costAnomaly';}).length > 0) suggestions.push('• <b>审查高额费用</b>：存在 ' + diagList.filter(function(d){return d.type==='costAnomaly';}).length + ' 次单次费用超过公司均值2倍的培训，建议HR核实费用合理性');
+      if (diagList.filter(function(d){return d.type==='lowROI';}).length > 0) suggestions.push('• <b>关注投入产出</b>：该员工培训投入产出比偏低，建议分析培训选择是否匹配岗位需求');
       suggestions.forEach(function(s) { h += '<div style="margin-bottom:6px">' + s + '</div>'; });
       h += '</div></div>';
     }
