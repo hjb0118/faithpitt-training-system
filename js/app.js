@@ -3514,91 +3514,370 @@ function viewSummary(id) {
 
   document.getElementById('refreshBackupsBtn').addEventListener('click', loadBackupList);
 
-  // ─── 培训报告 ───
+  // ─── 培训报告（v2 优化版） ───
   document.getElementById('exportReportBtn').addEventListener('click', function() {
     var now = new Date();
-    var year = now.getFullYear();
+    var curYear = now.getFullYear();
     var today = now.toLocaleDateString('zh-CN');
-    var thisYearRecs = ALL_DATA.filter(function(r) {
-      var d = new Date(r['培训日期'] || r['createdAt'] || '');
-      return d.getFullYear() === year;
+
+    // 收集所有年份
+    var allYears = {};
+    ALL_DATA.forEach(function(r) {
+      var y = (r['培训日期'] || r['createdAt'] || '').slice(0, 4);
+      if (y && /^\d{4}$/.test(y)) allYears[y] = true;
     });
-    var totalCost = 0, sumCount = 0, doneCount = 0;
-    var deptMap = {};
-    thisYearRecs.forEach(function(r) {
-      totalCost += parseFloat(r['费用']) || 0;
-      if (r['总结内容']) sumCount++;
-      if (r['状态'] === '已完成') doneCount++;
-      var dept = r['部门'] || '未知';
-      if (!deptMap[dept]) deptMap[dept] = { total: 0, done: 0, cost: 0 };
-      deptMap[dept].total++;
-      if (r['状态'] === '已完成') deptMap[dept].done++;
-      deptMap[dept].cost += parseFloat(r['费用']) || 0;
-    });
+    var yearList = Object.keys(allYears).sort().reverse();
+    if (yearList.indexOf(String(curYear)) < 0) yearList.unshift(String(curYear));
+
+    // 状态样式映射
     var stMap = { '待审批':'badge-o', '已通过':'badge-b', '已驳回':'badge-r', '学习中':'badge-b', '总结已提交':'badge-b', '待评审':'badge-b', '30天已回访':'badge-g', '已完成':'badge-g' };
-    var rateAll = thisYearRecs.length ? Math.round(doneCount/thisYearRecs.length*100) : 0;
-    var reportHtml = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>培训报告 '+year+'</title><style>' +
-      'body{font-family:-apple-system,"Microsoft YaHei",sans-serif;padding:40px;color:#333;font-size:14px;line-height:1.8;max-width:900px;margin:0 auto}' +
-      'h1{text-align:center;color:#4E9936;border-bottom:3px solid #A8D94A;padding-bottom:12px;margin-bottom:6px;font-size:22px}' +
-      '.sub{text-align:center;color:#93A88A;font-size:13px;margin-bottom:32px}' +
-      '.cards{text-align:center;margin-bottom:28px}' +
-      '.card{display:inline-block;background:#F4FCE3;border:1px solid #E2E8DC;border-radius:8px;padding:16px 24px;margin:5px;text-align:center;min-width:120px}' +
-      '.card.v{font-size:28px;font-weight:700}.card.l{font-size:12px;color:#93A88A;margin-top:4px}' +
-      '.g{color:#4E9936}.b{color:#3AAFA5}.o{color:#9A9000}.r{color:#E05C5C}' +
-      '.section{margin:28px 0}.section h2{font-size:16px;border-left:4px solid #CCEF7F;padding-left:10px;margin-bottom:12px}' +
-      'table{width:100%;border-collapse:collapse;font-size:13px}' +
-      'th{background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600}' +
-      'td{padding:9px 12px;border-bottom:1px solid #EEE}' +
+    var fuzzyWords = /开阔眼界|提升能力|解决认知|学习同行|增长见识|提高水平|加强学习|增强意识/i;
+
+    // 生成报告函数（支持年份切换）
+    function buildReport(year) {
+      year = parseInt(year);
+      var thisYearRecs = ALL_DATA.filter(function(r) {
+        var d = new Date(r['培训日期'] || r['createdAt'] || '');
+        return d.getFullYear() === year;
+      });
+      var lastYearRecs = ALL_DATA.filter(function(r) {
+        var d = new Date(r['培训日期'] || r['createdAt'] || '');
+        return d.getFullYear() === (year - 1);
+      });
+
+      // 今年统计
+      var totalCost = 0, sumCount = 0, doneCount = 0;
+      var deptMap = {}, typeMap = {};
+      var commitmentFulfilled = 0, commitmentTotal = 0;
+      var self30Done = 0, self30Total = 0;
+      var summaryOverdue = 0, diagCount = 0;
+
+      thisYearRecs.forEach(function(r) {
+        totalCost += parseFloat(r['费用']) || 0;
+        if (r['总结内容'] || r['学习总结']) sumCount++;
+        var st = r['状态'] || '';
+        if (st === '已完成') doneCount++;
+        var dept = r['部门'] || '未知';
+        if (!deptMap[dept]) deptMap[dept] = { total: 0, done: 0, cost: 0, sumCount: 0 };
+        deptMap[dept].total++;
+        if (st === '已完成') deptMap[dept].done++;
+        deptMap[dept].cost += parseFloat(r['费用']) || 0;
+        if (r['总结内容'] || r['学习总结']) deptMap[dept].sumCount++;
+        var tp = r['培训类型'] || '未分类';
+        typeMap[tp] = (typeMap[tp] || 0) + 1;
+        if (r['30天自评内容']) { self30Total++; self30Done++; }
+        else if (st === '总结已提交' || st === '30天已回访' || st === '已完成') { self30Total++; }
+        if (r['行动计划'] && (st === '已完成' || r['30天执行'])) commitmentFulfilled++;
+        if (r['行动计划']) commitmentTotal++;
+        // 诊断
+        var trainDate = r['培训日期'] ? new Date(r['培训日期']) : null;
+        var daysSince = trainDate ? Math.floor((now - trainDate) / 86400000) : -1;
+        if (daysSince > 7 && (st === '学习中' || st === '已通过')) { summaryOverdue++; diagCount++; }
+        var goal = r['学习目标'] || r['培训目标'] || '';
+        if (goal && fuzzyWords.test(goal)) diagCount++;
+        var summary = r['学习总结'] || '';
+        if ((st === '总结已提交' || st === '30天已回访' || st === '已完成') && !/分享|内部分享|部门分享|团队分享|转训/i.test(summary)) diagCount++;
+      });
+
+      // 去年统计（用于对比）
+      var lastCost = 0, lastDone = 0;
+      lastYearRecs.forEach(function(r) {
+        lastCost += parseFloat(r['费用']) || 0;
+        if (r['状态'] === '已完成') lastDone++;
+      });
+
+      var rateAll = thisYearRecs.length ? Math.round(doneCount / thisYearRecs.length * 100) : 0;
+      var lastRate = lastYearRecs.length ? Math.round(lastDone / lastYearRecs.length * 100) : 0;
+      var sumRate = thisYearRecs.length ? Math.round(sumCount / thisYearRecs.length * 100) : 0;
+      var self30Rate = self30Total > 0 ? Math.round(self30Done / self30Total * 100) : 0;
+      var commitRate = commitmentTotal > 0 ? Math.round(commitmentFulfilled / commitmentTotal * 100) : 0;
+
+      // 健康度评分
+      var applyRate = 100;
+      var summaryHealthRate = thisYearRecs.length > 0 ? Math.round((thisYearRecs.length - summaryOverdue) / thisYearRecs.length * 100) : 0;
+      var followRate = self30Total > 0 ? self30Rate : 0;
+      var eval90Rate = thisYearRecs.length > 0 ? Math.round(doneCount / thisYearRecs.length * 100) : 0;
+      var healthScore = Math.round((applyRate + summaryHealthRate + followRate + eval90Rate) / 4);
+      var healthLabel = healthScore >= 80 ? '良好' : healthScore >= 60 ? '待改进' : '需关注';
+      var healthColor = healthScore >= 80 ? '#4E9936' : healthScore >= 60 ? '#C4B800' : '#D9534F';
+      var healthBg = healthScore >= 80 ? '#E8F5E9' : healthScore >= 60 ? '#FFFDE7' : '#FFEBEE';
+
+      // 对比箭头
+      function diffArrow(curr, prev, invert) {
+        if (prev === 0 && curr === 0) return '';
+        var diff = curr - prev;
+        if (diff === 0) return '<span style="font-size:11px;color:#999;margin-left:4px">→</span>';
+        var good = invert ? diff < 0 : diff > 0;
+        var arrow = diff > 0 ? '↑' : '↓';
+        var color = good ? '#4E9936' : '#D9534F';
+        return '<span style="font-size:11px;color:' + color + ';margin-left:4px">' + arrow + Math.abs(diff) + '%</span>';
+      }
+      function costDiff(curr, prev) {
+        var diff = curr - prev;
+        if (diff === 0) return '';
+        var arrow = diff > 0 ? '↑' : '↓';
+        var color = diff < 0 ? '#4E9936' : '#D9534F';
+        return '<span style="font-size:11px;color:' + color + ';margin-left:4px">' + arrow + '¥' + Math.abs(Math.round(diff)).toLocaleString() + '</span>';
+      }
+
+      // ── 构建HTML ──
+      var h = '';
+
+      // 年份选择器 + 打印按钮
+      h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px" class="np">';
+      h += '<div style="display:flex;align-items:center;gap:8px">';
+      h += '<label style="font-size:13px;color:#666">报告年度：</label>';
+      h += '<select id="rptYearSel" style="padding:6px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;background:#fff;cursor:pointer">';
+      yearList.forEach(function(y) { h += '<option value="' + y + '"' + (parseInt(y) === year ? ' selected' : '') + '>' + y + '年</option>'; });
+      h += '</select>';
+      h += '</div>';
+      h += '<button onclick="window.print()" style="background:#A8D94A;color:#0D1A08;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:14px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> 打印 / PDF</button>';
+      h += '</div>';
+
+      // 标题
+      h += '<div style="text-align:center;margin-bottom:28px">';
+      h += '<div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:6px">';
+      h += '<img src="/uploads/logo.png" alt="LOGO" style="height:36px" onerror="this.style.display=\'none\'">';
+      h += '<h1 style="font-size:22px;color:#4E9936;font-weight:700;margin:0">培训价值追踪报告</h1>';
+      h += '</div>';
+      h += '<div style="font-size:12px;color:#999">' + year + '年度 · 生成日期：' + today + ' · 生成人：' + esc(ME ? ME.name : '') + '</div>';
+      h += '</div>';
+
+      // ━━━ 核心指标卡片（带同比） ━━━
+      h += '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px">';
+      var cards = [
+        { label: '培训申请', value: thisYearRecs.length, sub: '次', color: '#4E9936', diff: '' },
+        { label: '总投入', value: '¥' + totalCost.toLocaleString(), sub: '', color: '#3AAFA5', diff: costDiff(totalCost, lastCost) },
+        { label: '已提交总结', value: sumCount, sub: sumRate + '%提交率', color: '#9A9000', diff: '' },
+        { label: '已完成闭环', value: doneCount, sub: '', color: '#4E9936', diff: diffArrow(rateAll, lastRate) },
+        { label: '完成率', value: rateAll + '%', sub: '', color: rateAll >= 80 ? '#4E9936' : rateAll >= 50 ? '#C4B800' : '#D9534F', diff: diffArrow(rateAll, lastRate) }
+      ];
+      cards.forEach(function(c) {
+        h += '<div style="background:#F4FCE3;border:1px solid #E2E8DC;border-radius:10px;padding:14px 16px;text-align:center">';
+        h += '<div style="font-size:11px;color:#999;margin-bottom:4px">' + c.label + '</div>';
+        h += '<div style="font-size:24px;font-weight:700;color:' + c.color + '">' + c.value + c.diff + '</div>';
+        if (c.sub) h += '<div style="font-size:11px;color:#999;margin-top:2px">' + c.sub + '</div>';
+        h += '</div>';
+      });
+      h += '</div>';
+
+      // ━━━ 闭环健康度 ━━━
+      h += '<div style="background:' + healthBg + ';border-radius:12px;padding:16px 20px;margin-bottom:20px;border-left:4px solid ' + healthColor + '">';
+      h += '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">';
+      h += '<h3 style="font-size:15px;color:#333;font-weight:700;margin:0"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:6px;color:' + healthColor + '"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>培训闭环健康度：' + healthLabel + '（' + healthScore + '分）</h3>';
+      h += '<span style="font-size:12px;color:#999">共 ' + diagCount + ' 项待改进</span>';
+      h += '</div>';
+      h += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px">';
+      var loopItems = [
+        { label: '申请审批', rate: applyRate, color: '#4E9936' },
+        { label: '学习总结', rate: summaryHealthRate, color: summaryHealthRate >= 80 ? '#4E9936' : summaryHealthRate >= 60 ? '#C4B800' : '#D9534F' },
+        { label: '30天跟进', rate: followRate, color: followRate >= 80 ? '#4E9936' : followRate >= 60 ? '#C4B800' : '#D9534F' },
+        { label: '90天评估', rate: eval90Rate, color: eval90Rate >= 80 ? '#4E9936' : eval90Rate >= 60 ? '#C4B800' : '#D9534F' }
+      ];
+      loopItems.forEach(function(li) {
+        h += '<div style="background:#fff;border-radius:8px;padding:10px;text-align:center">';
+        h += '<div style="font-size:11px;color:#999;margin-bottom:4px">' + li.label + '</div>';
+        h += '<div style="font-size:20px;font-weight:700;color:' + li.color + '">' + li.rate + '%</div>';
+        h += '<div style="width:100%;height:4px;background:#eee;border-radius:2px;margin-top:6px;overflow:hidden">';
+        h += '<div style="width:' + li.rate + '%;height:100%;background:' + li.color + ';border-radius:2px"></div>';
+        h += '</div></div>';
+      });
+      h += '</div></div>';
+
+      // ━━━ 部门培训统计 ━━━
+      if (Object.keys(deptMap).length) {
+        h += '<div style="margin-bottom:20px">';
+        h += '<h3 style="font-size:15px;color:#333;font-weight:700;margin:0 0 12px 0;border-left:4px solid #CCEF7F;padding-left:10px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> 部门培训统计</h3>';
+        h += '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>';
+        h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">部门</th>';
+        h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">申请数</th>';
+        h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">已完成</th>';
+        h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">总结提交</th>';
+        h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">完成率</th>';
+        h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">总费用</th>';
+        h += '</tr></thead><tbody>';
+        Object.keys(deptMap).sort().forEach(function(dept) {
+          var d = deptMap[dept];
+          var rate = d.total ? Math.round(d.done / d.total * 100) : 0;
+          var rc = rate >= 80 ? 'badge-g' : rate >= 50 ? 'badge-o' : 'badge-r';
+          h += '<tr><td style="padding:9px 12px;border-bottom:1px solid #EEE">' + esc(dept) + '</td>';
+          h += '<td style="padding:9px 12px;border-bottom:1px solid #EEE">' + d.total + '</td>';
+          h += '<td style="padding:9px 12px;border-bottom:1px solid #EEE">' + d.done + '</td>';
+          h += '<td style="padding:9px 12px;border-bottom:1px solid #EEE">' + d.sumCount + '</td>';
+          h += '<td style="padding:9px 12px;border-bottom:1px solid #EEE"><span class="badge ' + rc + '">' + rate + '%</span></td>';
+          h += '<td style="padding:9px 12px;border-bottom:1px solid #EEE">¥' + d.cost.toLocaleString() + '</td></tr>';
+        });
+        h += '</tbody></table></div>';
+      }
+
+      // ━━━ 待处理事项（分优先级） ━━━
+      var todoUrgent = thisYearRecs.filter(function(r) { return ['待审批', '已通过'].indexOf(r['状态']) >= 0; });
+      var todoSummary = thisYearRecs.filter(function(r) {
+        var st = r['状态'] || '';
+        var trainDate = r['培训日期'] ? new Date(r['培训日期']) : null;
+        var daysSince = trainDate ? Math.floor((now - trainDate) / 86400000) : 0;
+        return (st === '学习中' || st === '已通过') && daysSince > 7;
+      });
+      var todo30 = thisYearRecs.filter(function(r) { return r['状态'] === '总结已提交' && !r['30天自评内容']; });
+      var todo90 = thisYearRecs.filter(function(r) { return r['状态'] === '30天已回访' && !r['评估分数']; });
+
+      if (todoUrgent.length || todoSummary.length || todo30.length || todo90.length) {
+        h += '<div style="margin-bottom:20px">';
+        h += '<h3 style="font-size:15px;color:#333;font-weight:700;margin:0 0 12px 0;border-left:4px solid #D9534F;padding-left:10px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px;color:#D9534F"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg> 待处理事项</h3>';
+
+        if (todoUrgent.length) {
+          h += '<div style="background:#FFF3E0;border-radius:8px;padding:12px 14px;margin-bottom:8px;border-left:3px solid #FF9800">';
+          h += '<div style="font-size:13px;font-weight:600;color:#E65100;margin-bottom:6px">🔴 待审批/待通过（' + todoUrgent.length + '条）</div>';
+          h += '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="padding:6px 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,0.1)">员工</th><th style="padding:6px 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,0.1)">培训项目</th><th style="padding:6px 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,0.1)">状态</th></tr></thead><tbody>';
+          todoUrgent.forEach(function(r) {
+            h += '<tr><td style="padding:5px 8px">' + esc(r['员工']) + '</td><td style="padding:5px 8px">' + esc(r['培训项目']) + '</td><td style="padding:5px 8px"><span class="badge badge-o">' + esc(r['状态']) + '</span></td></tr>';
+          });
+          h += '</tbody></table></div>';
+        }
+        if (todoSummary.length) {
+          h += '<div style="background:#FFEBEE;border-radius:8px;padding:12px 14px;margin-bottom:8px;border-left:3px solid #D9534F">';
+          h += '<div style="font-size:13px;font-weight:600;color:#C62828;margin-bottom:6px">🟠 总结逾期未交（' + todoSummary.length + '条）</div>';
+          h += '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="padding:6px 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,0.1)">员工</th><th style="padding:6px 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,0.1)">培训项目</th><th style="padding:6px 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,0.1)">培训日期</th></tr></thead><tbody>';
+          todoSummary.forEach(function(r) {
+            h += '<tr><td style="padding:5px 8px">' + esc(r['员工']) + '</td><td style="padding:5px 8px">' + esc(r['培训项目']) + '</td><td style="padding:5px 8px">' + esc(r['培训日期'] || '-') + '</td></tr>';
+          });
+          h += '</tbody></table></div>';
+        }
+        if (todo30.length) {
+          h += '<div style="background:#E3F2FD;border-radius:8px;padding:12px 14px;margin-bottom:8px;border-left:3px solid #2196F3">';
+          h += '<div style="font-size:13px;font-weight:600;color:#1565C0;margin-bottom:6px">🔵 待30天回访（' + todo30.length + '条）</div>';
+          h += '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="padding:6px 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,0.1)">员工</th><th style="padding:6px 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,0.1)">培训项目</th></tr></thead><tbody>';
+          todo30.forEach(function(r) {
+            h += '<tr><td style="padding:5px 8px">' + esc(r['员工']) + '</td><td style="padding:5px 8px">' + esc(r['培训项目']) + '</td></tr>';
+          });
+          h += '</tbody></table></div>';
+        }
+        if (todo90.length) {
+          h += '<div style="background:#F3E5F5;border-radius:8px;padding:12px 14px;margin-bottom:8px;border-left:3px solid #9C27B0">';
+          h += '<div style="font-size:13px;font-weight:600;color:#6A1B9A;margin-bottom:6px">🟣 待90天评估（' + todo90.length + '条）</div>';
+          h += '<table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr><th style="padding:6px 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,0.1)">员工</th><th style="padding:6px 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,0.1)">培训项目</th><th style="padding:6px 8px;text-align:left;border-bottom:1px solid rgba(0,0,0,0.1)">进度</th></tr></thead><tbody>';
+          todo90.forEach(function(r) {
+            var label90 = r['90天自评内容'] ? '待HR评估' : '待员工复盘';
+            h += '<tr><td style="padding:5px 8px">' + esc(r['员工']) + '</td><td style="padding:5px 8px">' + esc(r['培训项目']) + '</td><td style="padding:5px 8px"><span class="badge badge-r">' + label90 + '</span></td></tr>';
+          });
+          h += '</tbody></table></div>';
+        }
+        h += '</div>';
+      }
+
+      // ━━━ 培训类型分布 ━━━
+      var typeKeys = Object.keys(typeMap).sort(function(a, b) { return typeMap[b] - typeMap[a]; });
+      if (typeKeys.length > 0) {
+        h += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">';
+        h += '<div style="background:#F4FCE3;border-radius:12px;padding:16px 20px">';
+        h += '<h3 style="font-size:14px;color:#666;margin:0 0 12px 0"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg> 培训类型分布</h3>';
+        var maxT = Math.max.apply(null, typeKeys.map(function(t) { return typeMap[t]; }));
+        typeKeys.forEach(function(t) {
+          var pct = Math.round(typeMap[t] / thisYearRecs.length * 100);
+          var barW = Math.round(typeMap[t] / maxT * 100);
+          h += '<div style="margin-bottom:8px">';
+          h += '<div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:2px"><span style="color:#555">' + esc(t) + '</span><span style="color:#4E9936;font-weight:600">' + typeMap[t] + '次（' + pct + '%）</span></div>';
+          h += '<div style="width:100%;height:6px;background:#eee;border-radius:3px;overflow:hidden"><div style="width:' + barW + '%;height:100%;background:linear-gradient(90deg,#A8D94A,#4E9936);border-radius:3px"></div></div>';
+          h += '</div>';
+        });
+        h += '</div>';
+
+        // 关键比率
+        h += '<div style="background:#F4FCE3;border-radius:12px;padding:16px 20px">';
+        h += '<h3 style="font-size:14px;color:#666;margin:0 0 12px 0"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg> 关键转化率</h3>';
+        var metrics = [
+          { label: '总结提交率', value: sumRate + '%', sub: sumCount + '/' + thisYearRecs.length, color: sumRate >= 80 ? '#4E9936' : '#C4B800' },
+          { label: '30天跟进率', value: self30Rate + '%', sub: self30Done + '/' + self30Total, color: self30Rate >= 80 ? '#4E9936' : '#C4B800' },
+          { label: '承诺落地率', value: commitRate + '%', sub: commitmentFulfilled + '/' + commitmentTotal, color: commitRate >= 80 ? '#4E9936' : '#C4B800' }
+        ];
+        metrics.forEach(function(m) {
+          h += '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee">';
+          h += '<span style="font-size:13px;color:#555">' + m.label + '</span>';
+          h += '<span><span style="font-size:18px;font-weight:700;color:' + m.color + '">' + m.value + '</span><span style="font-size:11px;color:#999;margin-left:6px">' + m.sub + '</span></span>';
+          h += '</div>';
+        });
+        h += '</div></div>';
+      }
+
+      // ━━━ 培训明细（带状态筛选） ━━━
+      h += '<div style="margin-bottom:20px">';
+      h += '<h3 style="font-size:15px;color:#333;font-weight:700;margin:0 0 12px 0;border-left:4px solid #CCEF7F;padding-left:10px"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> 培训明细（' + year + '年 · 共' + thisYearRecs.length + '条）</h3>';
+
+      // 筛选标签
+      var statusList = ['全部', '待审批', '已通过', '学习中', '总结已提交', '30天已回访', '已完成'];
+      h += '<div id="rptFilterTabs" style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap">';
+      statusList.forEach(function(s, i) {
+        var isActive = i === 0;
+        h += '<span data-filter="' + s + '" style="padding:4px 12px;border-radius:16px;font-size:12px;cursor:pointer;border:1px solid ' + (isActive ? '#4E9936' : '#ddd') + ';background:' + (isActive ? '#4E9936' : '#fff') + ';color:' + (isActive ? '#fff' : '#666') + ';font-weight:' + (isActive ? '600' : '400') + '">' + s + (i === 0 ? '(' + thisYearRecs.length + ')' : '') + '</span>';
+      });
+      h += '</div>';
+
+      h += '<table id="rptDetailTable" style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr>';
+      h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">员工</th>';
+      h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">部门</th>';
+      h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">项目</th>';
+      h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">类型</th>';
+      h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">费用</th>';
+      h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">日期</th>';
+      h += '<th style="background:#F6F8F4;padding:10px 12px;text-align:left;border-bottom:2px solid #E2E8DC;font-weight:600">状态</th>';
+      h += '</tr></thead><tbody>';
+      thisYearRecs.sort(function(a, b) { return (b['培训日期'] || '').localeCompare(a['培训日期'] || ''); }).forEach(function(r) {
+        var st = r['状态'] || '';
+        h += '<tr data-st="' + esc(st) + '"><td style="padding:9px 12px;border-bottom:1px solid #EEE">' + esc(r['员工']) + '</td>';
+        h += '<td style="padding:9px 12px;border-bottom:1px solid #EEE">' + esc(r['部门'] || '-') + '</td>';
+        h += '<td style="padding:9px 12px;border-bottom:1px solid #EEE;max-width:180px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="' + esc(r['培训项目']) + '">' + esc(r['培训项目']) + '</td>';
+        h += '<td style="padding:9px 12px;border-bottom:1px solid #EEE">' + esc(r['培训类型'] || '-') + '</td>';
+        h += '<td style="padding:9px 12px;border-bottom:1px solid #EEE">¥' + (parseFloat(r['费用']) || 0).toLocaleString() + '</td>';
+        h += '<td style="padding:9px 12px;border-bottom:1px solid #EEE">' + esc(r['培训日期'] || '-') + '</td>';
+        h += '<td style="padding:9px 12px;border-bottom:1px solid #EEE"><span class="badge ' + (stMap[st] || '') + '">' + esc(st) + '</span></td></tr>';
+      });
+      h += '</tbody></table></div>';
+
+      // 底部
+      h += '<div style="text-align:center;margin-top:32px;font-size:12px;color:#bbb;border-top:1px solid #eee;padding-top:16px">由培训价值追踪系统生成 · ' + today + '</div>';
+
+      return h;
+    }
+
+    // 打开新窗口
+    var reportHtml = '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><title>培训价值追踪报告</title><style>' +
+      'body{font-family:-apple-system,"Microsoft YaHei",sans-serif;padding:40px;color:#333;font-size:14px;line-height:1.8;max-width:960px;margin:0 auto}' +
+      'h1,h2,h3{margin:0}table{border-collapse:collapse;width:100%}' +
       '.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}' +
       '.badge-o{background:#FAFBE5;color:#9A9000}.badge-g{background:#EEF9E8;color:#4E9936}.badge-b{background:#E5F7F6;color:#3AAFA5}.badge-r{background:#FEEEEE;color:#E05C5C}' +
-      '.ft{text-align:center;margin-top:32px;font-size:12px;color:#bbb;border-top:1px solid #eee;padding-top:16px}' +
       '@media print{body{padding:20px}.np{display:none!important}}' +
-      '.btn{background:#A8D94A;color:#0D1A08;border:none;padding:8px 20px;border-radius:6px;cursor:pointer;font-size:14px;margin-bottom:20px}' +
-      '.btn:hover{background:#A8D94A}' +
       '</style></head><body>' +
-      '<button class="btn np" onclick="window.print()"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg> 打印 / 另存为 PDF</button>' +
-      '<h1>培训价值追踪报告</h1>' +
-      '<div class="sub">' + year + '年度 · 生成日期：' + today + ' · 生成人：' + esc(ME ? ME.name : '') + '</div>' +
-      '<div class="cards">' +
-      '<div class="card"><div class="v g">' + thisYearRecs.length + '</div><div class="l">培训申请（今年）</div></div>' +
-      '<div class="card"><div class="v b">¥' + totalCost.toLocaleString() + '</div><div class="l">总投入</div></div>' +
-      '<div class="card"><div class="v o">' + sumCount + '</div><div class="l">已提交总结</div></div>' +
-      '<div class="card"><div class="v g">' + doneCount + '</div><div class="l">已完成闭环</div></div>' +
-      '<div class="card"><div class="v ' + (rateAll >= 80 ? 'g' : rateAll >= 50 ? 'o' : 'r') + '">' + rateAll + '%</div><div class="l">完成率</div></div>' +
-      '</div>';
-    if (Object.keys(deptMap).length) {
-      reportHtml += '<div class="section"><h2><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> 部门培训统计</h2><table><thead><tr><th>部门</th><th>申请数</th><th>已完成</th><th>完成率</th><th>总费用</th></tr></thead><tbody>';
-      Object.keys(deptMap).sort().forEach(function(dept) {
-        var d = deptMap[dept];
-        var rate = d.total ? Math.round(d.done/d.total*100) : 0;
-        var rc = rate >= 80 ? 'badge-g' : rate >= 50 ? 'badge-o' : 'badge-r';
-        reportHtml += '<tr><td>' + esc(dept) + '</td><td>' + d.total + '</td><td>' + d.done + '</td><td><span class="badge ' + rc + '">' + rate + '%</span></td><td>¥' + d.cost.toLocaleString() + '</td></tr>';
-      });
-      reportHtml += '</tbody></table></div>';
-    }
-    var todoHR = thisYearRecs.filter(function(r) { return ['待审批','已通过'].indexOf(r['状态']) >= 0; });
-    var todo30 = thisYearRecs.filter(function(r) { return r['状态'] === '待评审' && !r['30天执行']; });
-    var todo90 = thisYearRecs.filter(function(r) { return r['状态'] === '30天已回访' && !r['评估分数']; });
-    if (todoHR.length || todo30.length || todo90.length) {
-      reportHtml += '<div class="section"><h2><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg> 待处理事项</h2><table><thead><tr><th>类型</th><th>员工</th><th>培训项目</th><th>状态</th></tr></thead><tbody>';
-      todoHR.forEach(function(r) { reportHtml += '<tr><td>待处理</td><td>' + esc(r['员工']) + '</td><td>' + esc(r['培训项目']) + '</td><td><span class="badge badge-o">' + esc(r['状态']) + '</span></td></tr>'; });
-      todo30.forEach(function(r) { reportHtml += '<tr><td>待30天回访</td><td>' + esc(r['员工']) + '</td><td>' + esc(r['培训项目']) + '</td><td><span class="badge badge-b">待回访</span></td></tr>'; });
-      todo90.forEach(function(r) { var label90 = r['90天自评内容'] ? '待HR评估' : '待员工复盘'; reportHtml += '<tr><td>待90天评估</td><td>' + esc(r['员工']) + '</td><td>' + esc(r['培训项目']) + '</td><td><span class="badge badge-r">' + label90 + '</span></td></tr>'; });
-      reportHtml += '</tbody></table></div>';
-    }
-    var recent = ALL_DATA.slice().sort(function(a, b) { return new Date(b['createdAt']||0) - new Date(a['createdAt']||0); }).slice(0, 30);
-    if (recent.length) {
-      reportHtml += '<div class="section"><h2><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:middle;margin-right:4px"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> 培训记录（最近30条 / 共' + ALL_DATA.length + '条）</h2><table><thead><tr><th>员工</th><th>部门</th><th>项目</th><th>费用</th><th>日期</th><th>状态</th></tr></thead><tbody>';
-      recent.forEach(function(r) {
-        var st = r['状态'] || '';
-        reportHtml += '<tr><td>' + esc(r['员工']) + '</td><td>' + esc(r['部门']||'-') + '</td><td>' + esc(r['培训项目']) + '</td><td>¥' + (parseFloat(r['费用'])||0).toLocaleString() + '</td><td>' + esc(r['培训日期']||'-') + '</td><td><span class="badge ' + (stMap[st]||'') + '">' + esc(st) + '</span></td></tr>';
-      });
-      reportHtml += '</tbody></table></div>';
-    }
-    reportHtml += '<div class="ft">由培训价值追踪系统生成 · ' + today + '</div></body></html>';
+      '<div id="rptContent">' + buildReport(curYear) + '</div>' +
+      '<scr' + 'ipt>' +
+      'var yearSel=document.getElementById("rptYearSel");' +
+      'if(yearSel){yearSel.addEventListener("change",function(){' +
+      '  var y=this.value;' +
+      '  var fn=window._buildReport;' +
+      '  if(fn)document.getElementById("rptContent").innerHTML=fn(y);' +
+      '  bindFilterTabs();' +
+      '});}' +
+      'function bindFilterTabs(){' +
+      '  var tabs=document.querySelectorAll("#rptFilterTabs span[data-filter]");' +
+      '  var rows=document.querySelectorAll("#rptDetailTable tbody tr");' +
+      '  tabs.forEach(function(tab){' +
+      '    tab.addEventListener("click",function(){' +
+      '      tabs.forEach(function(t){t.style.background="#fff";t.style.color="#666";t.style.border="1px solid #ddd";t.style.fontWeight="400";});' +
+      '      this.style.background="#4E9936";this.style.color="#fff";this.style.border="1px solid #4E9936";this.style.fontWeight="600";' +
+      '      var f=this.getAttribute("data-filter");' +
+      '      rows.forEach(function(row){' +
+      '        row.style.display=(f==="全部"||row.getAttribute("data-st")===f)?"":"none";' +
+      '      });' +
+      '    });' +
+      '  });' +
+      '}' +
+      'bindFilterTabs();' +
+      '</scr' + 'ipt></body></html>';
+
     var win = window.open('', '_blank');
     win.document.write(reportHtml);
     win.document.close();
+    // 注入buildReport函数到新窗口
+    win._buildReport = buildReport;
   });
 
   function openM(title, html, maxWidth) {
