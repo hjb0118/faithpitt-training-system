@@ -180,6 +180,13 @@
     <div class="pg" id="p-dash">
       <div class="pt">数据看板</div>
       <div class="pd">培训投入与产出的全局视图</div>
+      <!-- 时间范围筛选 -->
+      <div id="dashRangeBar" style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        <button class="bt bts dash-range-btn on" data-range="all">全部</button>
+        <button class="bt bts dash-range-btn" data-range="year">本年</button>
+        <button class="bt bts dash-range-btn" data-range="quarter">本季</button>
+        <button class="bt bts dash-range-btn" data-range="month">本月</button>
+      </div>
       <!-- HR专有：待处理快捷卡片 -->
       <div id="dashPendingCards" style="display:none;margin-bottom:16px"></div>
       <div class="sr" id="statsRow"></div>

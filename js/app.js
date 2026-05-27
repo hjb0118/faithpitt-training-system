@@ -10,6 +10,7 @@
   var SELECTED = {};
   var ALL_DEPTS = [];
   var CAL_DATE = new Date();
+  var DASH_RANGE = 'all'; // 看板时间筛选：all/year/quarter/month
 
   // ─── Lucide 图标图鉴 ───
   var ICONS = {
@@ -1492,15 +1493,48 @@ function viewSummary(id) {
   }
 
   function renderDash() {
-    var total = ALL_DATA.length;
+    // ── 时间筛选按钮（一次性绑定） ──
+    var rangeBar = document.getElementById('dashRangeBar');
+    if (rangeBar && !rangeBar._bound) {
+      rangeBar._bound = true;
+      var btns = rangeBar.querySelectorAll('.dash-range-btn');
+      for (var bi = 0; bi < btns.length; bi++) {
+        btns[bi].addEventListener('click', function() {
+          DASH_RANGE = this.getAttribute('data-range');
+          for (var bj = 0; bj < btns.length; bj++) btns[bj].classList.remove('on');
+          this.classList.add('on');
+          renderDash();
+        });
+      }
+    }
+    // ── 按时间范围筛选数据 ──
+    var nowDash = new Date();
+    var dashData = ALL_DATA;
+    if (DASH_RANGE !== 'all') {
+      var rangeStart;
+      if (DASH_RANGE === 'month') {
+        rangeStart = new Date(nowDash.getFullYear(), nowDash.getMonth(), 1);
+      } else if (DASH_RANGE === 'quarter') {
+        var qMonth = Math.floor(nowDash.getMonth() / 3) * 3;
+        rangeStart = new Date(nowDash.getFullYear(), qMonth, 1);
+      } else if (DASH_RANGE === 'year') {
+        rangeStart = new Date(nowDash.getFullYear(), 0, 1);
+      }
+      if (rangeStart) {
+        var rsStr = rangeStart.toISOString().slice(0, 10);
+        dashData = ALL_DATA.filter(function(r) { return (r['培训日期'] || '') >= rsStr; });
+      }
+    }
+
+    var total = dashData.length;
     var cost = 0;
     var pending = 0, sumDone = 0, actDone = 0, actTotal = 0;
     var todoCount = 0;
     var nowDash = new Date();
     var weekEndDash = new Date(nowDash);
     weekEndDash.setDate(weekEndDash.getDate() + 7);
-    for (var i = 0; i < ALL_DATA.length; i++) {
-      var r = ALL_DATA[i];
+    for (var i = 0; i < dashData.length; i++) {
+      var r = dashData[i];
       cost += (parseFloat(r['费用']) || 0);
       if (r['状态'] === '待审批') pending++;
       if (r['总结内容']) sumDone++;
@@ -1520,20 +1554,30 @@ function viewSummary(id) {
 
     }
     var sh = '';
-    sh += '<div class="st"><div class="st-l">培训总支出（元）</div><div class="st-v g">¥' + fmt(cost) + '</div></div>';
-    sh += '<div class="st"><div class="st-l">培训次数</div><div class="st-v">' + total + '</div></div>';
+    sh += '<div class="st" style="cursor:pointer" id="dashCostCard"><div class="st-l">培训总支出（元）</div><div class="st-v g">¥' + fmt(cost) + '</div></div>';
+    sh += '<div class="st" style="cursor:pointer" id="dashCountCard"><div class="st-l">培训次数</div><div class="st-v">' + total + '</div></div>';
     sh += '<div class="st" style="cursor:pointer" id="dashTodoCard"><div class="st-l">待处理事项</div><div class="st-v ' + (todoCount > 0 ? 'r' : 'g') + '">' + todoCount + '</div></div>';
-    sh += '<div class="st"><div class="st-l">待审批</div><div class="st-v o">' + pending + '</div></div>';
+    sh += '<div class="st" style="cursor:pointer" id="dashPendingCard"><div class="st-l">待审批</div><div class="st-v o">' + pending + '</div></div>';
     document.getElementById('statsRow').innerHTML = sh;
+    // 点击穿透
+    var costCard = document.getElementById('dashCostCard');
+    if (costCard) costCard.addEventListener('click', function() { go('all'); });
+    var countCard = document.getElementById('dashCountCard');
+    if (countCard) countCard.addEventListener('click', function() { go('all'); });
     var todoCard = document.getElementById('dashTodoCard');
     if (todoCard) todoCard.addEventListener('click', function() { go('todos'); });
+    var pendingCardEl = document.getElementById('dashPendingCard');
+    if (pendingCardEl) pendingCardEl.addEventListener('click', function() {
+      go('all');
+      setTimeout(function() { var sel = document.getElementById('f-st'); if (sel) { sel.value = '待审批'; sel.dispatchEvent(new Event('change')); } }, 100);
+    });
 
     // HR专属：待处理快捷卡片
     var pendingCardsEl = document.getElementById('dashPendingCards');
     var pendingApprovals = 0, pendingSummaries = 0, pendingReviews = 0, pending30 = 0, pending90 = 0;
     var now = new Date();
-    for (var pi = 0; pi < ALL_DATA.length; pi++) {
-      var pr = ALL_DATA[pi];
+    for (var pi = 0; pi < dashData.length; pi++) {
+      var pr = dashData[pi];
       if (pr['状态'] === '待审批') pendingApprovals++;
       if (pr['状态'] === '已通过' && !pr['总结内容']) pendingSummaries++;
       if (pr['状态'] === '总结已提交') pendingReviews++;
@@ -1608,7 +1652,7 @@ function viewSummary(id) {
       var key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
       monthMap[key] = 0;
     }
-    ALL_DATA.forEach(function(r) {
+    dashData.forEach(function(r) {
       var m = (r['培训日期'] || '').slice(0, 7);
       if (monthMap.hasOwnProperty(m)) monthMap[m] += (parseFloat(r['费用']) || 0);
     });
@@ -1616,7 +1660,7 @@ function viewSummary(id) {
     renderBarChart('monthChart', monthItems, 'var(--primary)');
 
     // 同比图：只有去年真的有数据才显示切换按钮
-    var lastYearHasData = ALL_DATA.some(function(r) {
+    var lastYearHasData = ALL_DATA.some(function(r) {  // 同比用全量数据
       return (r['培训日期'] || '').startsWith(String(now.getFullYear() - 1));
     });
     var toggleBtn = document.getElementById('toggleYear');
@@ -1639,7 +1683,7 @@ function viewSummary(id) {
         for (var mi2 = 0; mi2 < 12; mi2++) {
           ym[mi2] = { thisY: 0, lastY: 0 };
         }
-        ALL_DATA.forEach(function(r) {
+        ALL_DATA.forEach(function(r) {  // 同比用全量数据
           var dateStr = r['培训日期'] || '';
           var yr = parseInt(dateStr.slice(0, 4));
           var mo = parseInt(dateStr.slice(5, 7)) - 1;
@@ -1678,7 +1722,7 @@ function viewSummary(id) {
     // ROI Analysis
     var roiEl = document.getElementById('roiContent');
     // Only count records that have been approved or later
-    var roiRecords = ALL_DATA.filter(function(r) {
+    var roiRecords = dashData.filter(function(r) {
       return ['已通过','学习中','总结已提交','30天已回访','已完成'].indexOf(r['状态']) >= 0;
     });
     // By department
@@ -1710,7 +1754,7 @@ function viewSummary(id) {
         var execRate = d.execTotal > 0 ? Math.round(d.execCount / d.execTotal * 100) + '%' : '-';
         var avgSc = d.scoreCount > 0 ? (d.scoreSum / d.scoreCount).toFixed(1) : '-';
         var recRate = d.recCount > 0 ? Math.round(d.recCount / d.scoreCount * 100) + '%' : '-';
-        h += '<tr><td>' + k + '</td><td>' + d.count + '</td><td>¥' + fmt(d.cost) + '</td><td>¥' + fmt(avgCost) + '</td><td>' + execRate + '</td><td>' + avgSc + '</td><td>' + recRate + '</td></tr>';
+        h += '<tr><td data-label="名称">' + k + '</td><td data-label="次数">' + d.count + '</td><td data-label="总费用">¥' + fmt(d.cost) + '</td><td data-label="均费">¥' + fmt(avgCost) + '</td><td data-label="执行率">' + execRate + '</td><td data-label="评分">' + avgSc + '</td><td data-label="推荐率">' + recRate + '</td></tr>';
       }
       h += '</tbody></table></div></div>';
       return h;
@@ -1723,7 +1767,7 @@ function viewSummary(id) {
 
     // Dept chart
     var deptMap = {};
-    ALL_DATA.forEach(function(r) {
+    dashData.forEach(function(r) {
       var dept = r['部门'] || '未设置';
       if (!deptMap[dept]) deptMap[dept] = 0;
       deptMap[dept] += (parseFloat(r['费用']) || 0);
@@ -1733,7 +1777,7 @@ function viewSummary(id) {
 
     // Type chart
     var typeMap = {};
-    ALL_DATA.forEach(function(r) {
+    dashData.forEach(function(r) {
       var t = r['培训类型'] || '未分类';
       if (!typeMap[t]) typeMap[t] = 0;
       typeMap[t]++;
@@ -1743,24 +1787,24 @@ function viewSummary(id) {
 
     // Pipeline table
     var dh = '';
-    for (var j = 0; j < ALL_DATA.length; j++) {
-      var r2 = ALL_DATA[j];
+    for (var j = 0; j < dashData.length; j++) {
+      var r2 = dashData[j];
       var closed = r2['状态'] === '已完成';
-      dh += '<tr><td>' + esc(r2['员工']) + '</td><td>' + esc(r2['部门']) + '</td><td>' + esc(r2['培训项目']) + '</td>';
-      dh += '<td>¥' + fmt(r2['费用'] || 0) + '</td>';
-      dh += '<td><span class="bd ' + (r2['状态'] === '待审批' ? 'bdo' : 'bdg') + '">' + esc(r2['状态']) + '</span></td>';
-      dh += '<td><span class="bd ' + (r2['总结内容'] ? 'bdg' : 'bdy') + '">' + (r2['总结内容'] ? '已提交' : '未提交') + '</span></td>';
-      dh += '<td><span class="bd ' + (r2['30天执行'] ? 'bdb' : 'bdy') + '">' + esc(r2['30天执行'] || '未回访') + '</span></td>';
-      dh += '<td><span class="bd ' + (r2['评估分数'] ? 'bdg' : 'bdy') + '">' + (r2['评估分数'] ? r2['评估分数'] + '分' : '未评估') + '</span></td>';
-      dh += '<td><span class="bd ' + (closed ? 'bdg' : 'bdo') + '">' + (closed ? '完成' : '进行中') + '</span></td></tr>';
+      dh += '<tr><td data-label="姓名">' + esc(r2['员工']) + '</td><td data-label="部门">' + esc(r2['部门']) + '</td><td data-label="项目">' + esc(r2['培训项目']) + '</td>';
+      dh += '<td data-label="费用">¥' + fmt(r2['费用'] || 0) + '</td>';
+      dh += '<td data-label="申请"><span class="bd ' + (r2['状态'] === '待审批' ? 'bdo' : 'bdg') + '">' + esc(r2['状态']) + '</span></td>';
+      dh += '<td data-label="总结"><span class="bd ' + (r2['总结内容'] ? 'bdg' : 'bdy') + '">' + (r2['总结内容'] ? '已提交' : '未提交') + '</span></td>';
+      dh += '<td data-label="30天"><span class="bd ' + (r2['30天执行'] ? 'bdb' : 'bdy') + '">' + esc(r2['30天执行'] || '未回访') + '</span></td>';
+      dh += '<td data-label="90天"><span class="bd ' + (r2['评估分数'] ? 'bdg' : 'bdy') + '">' + (r2['评估分数'] ? r2['评估分数'] + '分' : '未评估') + '</span></td>';
+      dh += '<td data-label="闭环"><span class="bd ' + (closed ? 'bdg' : 'bdo') + '">' + (closed ? '完成' : '进行中') + '</span></td></tr>';
     }
     document.getElementById('dashTb').innerHTML = dh;
 
     // ─── 各部门完成率统计 ───
     var thisYear = new Date().getFullYear();
     var deptStats = {};
-    for (var di = 0; di < ALL_DATA.length; di++) {
-      var dr = ALL_DATA[di];
+    for (var di = 0; di < dashData.length; di++) {
+      var dr = dashData[di];
       if (!dr['培训日期']) continue;
       var dYear = parseInt(dr['培训日期'].split('-')[0]);
       if (dYear !== thisYear) continue;
@@ -1780,7 +1824,8 @@ function viewSummary(id) {
         var ds2 = deptStats[dk2];
         var rate = ds2.total > 0 ? Math.round(ds2.done / ds2.total * 100) : 0;
         var rateColor = rate >= 80 ? 'var(--success)' : rate >= 50 ? 'var(--warning)' : 'var(--danger)';
-        dRateH += '<tr><td>' + esc(dk2) + '</td><td>' + ds2.total + '</td><td>' + ds2.done + '</td><td>' + ds2.ongoing + '</td><td><span style="font-weight:700;color:' + rateColor + '">' + rate + '%</span></td></tr>';
+        dRateH += '<tr><td data-label="部门">' + esc(dk2) + '</td><td data-label="申请数">' + ds2.total + '</td><td data-label="已完成">' + ds2.done + '</td><td data-label="进行中">' + ds2.ongoing + '</td>';
+        dRateH += '<td><div style="display:flex;align-items:center;gap:8px"><div style="flex:1;height:8px;background:var(--border);border-radius:4px;overflow:hidden"><div style="width:' + rate + '%;height:100%;background:' + rateColor + ';border-radius:4px;transition:width 0.5s"></div></div><span style="font-weight:700;color:' + rateColor + ';font-size:12px;min-width:36px">' + rate + '%</span></div></td></tr>';
       }
     }
     document.getElementById('deptRateTb').innerHTML = dRateH;

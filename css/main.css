@@ -831,6 +831,10 @@ tbody tr:hover td{background:var(--primary-bg)}
 .roi-section h4{font-size:14px;font-weight:700;margin-bottom:10px;color:var(--text-secondary)}
 .dash-section-gap{margin-bottom:28px}
 
+/* 看板时间筛选按钮 */
+.dash-range-btn{transition:all .2s}
+.dash-range-btn.on{background:var(--primary)!important;color:var(--text)!important;font-weight:700;box-shadow:0 2px 8px rgba(204,239,127,0.4)}
+
 /* 环形进度图 */
 .donut-chart{
   display:inline-flex;
@@ -1298,4 +1302,27 @@ tbody tr:hover td{background:var(--primary-bg)}
   .md .bt{min-width:44px;min-height:42px;font-size:14px}
   .sr{grid-template-columns:1fr 1fr}
   .st-v{font-size:24px}
+
+  /* 移动端看板优化 */
+  #dashRangeBar{gap:6px}
+  #dashRangeBar .bt{flex:1;text-align:center;font-size:13px}
+  .bar-chart{gap:4px!important}
+  .bar-chart .bar-item{min-width:0}
+  .bar-chart .bar-l{font-size:10px!important}
+  .bar-chart .bar-v{font-size:10px!important}
+  .roi-section .tw table,.roi-section .tw thead,.roi-section .tw tbody,.roi-section .tw th,.roi-section .tw td,.roi-section .tw tr{display:block}
+  .roi-section .tw thead tr{position:absolute;top:-9999px;left:-9999px}
+  .roi-section .tw tr{border:1px solid var(--border);border-radius:var(--radius-lg);margin-bottom:10px;padding:10px;background:var(--bg-card)}
+  .roi-section .tw td{border:none;padding:4px 8px;font-size:13px;display:flex;align-items:flex-start;gap:8px}
+  .roi-section .tw td::before{content:attr(data-label);font-size:11px;font-weight:700;color:var(--text-muted);white-space:nowrap;min-width:50px;flex-shrink:0;padding-top:2px}
+}
+
+/* 超小屏幕 */
+@media(max-width:480px){
+  .sr{grid-template-columns:1fr}
+  .st-v{font-size:20px}
+  #dashRangeBar .bt{font-size:12px;padding:6px 8px}
+  .bar-chart .bar{min-height:20px}
+  .cd{padding:12px 14px}
+  .cd-t{font-size:14px}
 }
