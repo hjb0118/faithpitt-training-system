@@ -835,6 +835,27 @@ tbody tr:hover td{background:var(--primary-bg)}
 .dash-range-btn{transition:all .2s}
 .dash-range-btn.on{background:var(--primary)!important;color:var(--text)!important;font-weight:700;box-shadow:0 2px 8px rgba(204,239,127,0.4)}
 
+/* 触屏优化 */
+*{touch-action:manipulation}
+select{min-height:44px}
+.fg input,.fg select,.fg textarea{min-height:44px;font-size:16px}
+
+/* 表单校验 */
+.field-error{border-color:var(--danger)!important;box-shadow:0 0 0 3px rgba(224,92,92,0.15)!important}
+.field-error-msg{font-size:12px;color:var(--danger);margin-top:4px;display:none}
+.field-error+.field-error-msg{display:block}
+.field-ok{border-color:var(--success)!important;box-shadow:0 0 0 3px rgba(107,191,78,0.12)!important}
+
+/* 离线提示条 */
+.offline-bar{position:fixed;top:0;left:0;right:0;z-index:9999;background:var(--warning);color:#333;text-align:center;padding:8px 16px;font-size:13px;font-weight:600;transform:translateY(-100%);transition:transform .3s ease}
+.offline-bar.show{transform:translateY(0)}
+
+/* 快速提交浮动按钮 */
+.fab{display:none;position:fixed;bottom:24px;right:24px;width:56px;height:56px;border-radius:50%;background:var(--primary-dark);color:var(--text);border:none;box-shadow:0 4px 16px rgba(0,0,0,0.2);font-size:28px;cursor:pointer;z-index:50;align-items:center;justify-content:center;transition:transform .2s,box-shadow .2s}
+.fab:active{transform:scale(0.92)}
+@media(max-width:768px){.fab{display:flex}}
+@media(max-width:480px){.fab{bottom:16px;right:16px;width:48px;height:48px;font-size:24px}}
+
 /* 环形进度图 */
 .donut-chart{
   display:inline-flex;

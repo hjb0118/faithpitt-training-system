@@ -91,15 +91,15 @@
       <div class="cd"><div class="fgd">
         <datalist id="dl-org"></datalist>
         <datalist id="dl-loc"></datalist>
-        <div class="fg fl"><label>培训项目 *</label><input id="a-proj" placeholder="课程/峰会/工作坊名称"></div>
+        <div class="fg fl"><label>培训项目 *</label><input id="a-proj" placeholder="课程/峰会/工作坊名称"><div class="field-error-msg">请输入至少2个字符</div></div>
         <div class="fg"><label>培训机构</label><input id="a-org" placeholder="主办方" list="dl-org"></div>
         <div class="fg"><label>培训类型</label><select id="a-type"><option value="">请选择</option><option>内部培训</option><option>外部课程</option><option>在线学习</option><option>行业峰会</option><option>工作坊</option><option>认证考试</option><option>其他</option></select></div>
-        <div class="fg"><label>培训日期 *</label><input id="a-date" type="date"></div>
-        <div class="fg"><label>预计费用(元) *</label><input id="a-cost" type="number" placeholder="含学费、差旅、住宿"></div>
+        <div class="fg"><label>培训日期 *</label><input id="a-date" type="date"><div class="field-error-msg">请选择培训日期</div></div>
+        <div class="fg"><label>预计费用(元) *</label><input id="a-cost" type="number" inputmode="numeric" placeholder="含学费、差旅、住宿"><div class="field-error-msg">请输入有效金额</div></div>
         <div class="fg"><label>培训地点</label><input id="a-loc" placeholder="城市/线上" list="dl-loc"></div>
-        <div class="fg fl"><label>学习目标 * <small style="color:#999;font-weight:400">（不少于20字，描述要解决的具体问题）</small></label><textarea id="a-goal" rows="3" placeholder="示例：目前部门客户流失率较高，希望通过学习客户留存策略，找到适合我们业务场景的挽回方案"></textarea></div>
-        <div class="fg fl"><label>应用场景 * <small style="color:#999;font-weight:400">（培训后将在哪些具体工作中应用）</small></label><textarea id="a-scene" rows="2" placeholder="示例：客户回访流程优化、新员工带教、月度运营复盘"></textarea></div>
-        <div class="fg fl"><label>承诺产出 * <small style="color:#999;font-weight:400">（至少2项，需具体可衡量）</small></label><textarea id="a-out" rows="4" placeholder="1. 学习总结报告（含3个核心收获+1个可落地改进点）&#10;2. 部门内分享PPT（30分钟，覆盖本部门全员）&#10;3. 改进方案（含执行计划和预期效果）"></textarea></div>
+        <div class="fg fl"><label>学习目标 * <small style="color:#999;font-weight:400">（不少于20字，描述要解决的具体问题）</small></label><textarea id="a-goal" rows="3" placeholder="示例：目前部门客户流失率较高，希望通过学习客户留存策略，找到适合我们业务场景的挽回方案"></textarea><div class="field-error-msg">学习目标不少于20字</div></div>
+        <div class="fg fl"><label>应用场景 * <small style="color:#999;font-weight:400">（培训后将在哪些具体工作中应用）</small></label><textarea id="a-scene" rows="2" placeholder="示例：客户回访流程优化、新员工带教、月度运营复盘"></textarea><div class="field-error-msg">请描述至少一个应用场景</div></div>
+        <div class="fg fl"><label>承诺产出 * <small style="color:#999;font-weight:400">（至少2项，需具体可衡量）</small></label><textarea id="a-out" rows="4" placeholder="1. 学习总结报告（含3个核心收获+1个可落地改进点）&#10;2. 部门内分享PPT（30分钟，覆盖本部门全员）&#10;3. 改进方案（含执行计划和预期效果）"></textarea><div class="field-error-msg">请描述至少10个字符的承诺产出</div></div>
         <div class="fg fl" style="background:#f8f8f6;border-radius:8px;padding:12px;border:1px solid var(--border)">
           <div style="font-size:12px;font-weight:600;color:var(--text-secondary);margin-bottom:6px">填写质量自检</div>
           <div id="apply-check" style="font-size:12px;color:#999;line-height:1.8">
@@ -472,7 +472,10 @@
   <div class="md"><div class="mh"><h3 id="mTitle"></h3><button class="mx" id="modalClose">x</button></div><div class="mb" id="mBody"></div></div>
 </div>
 <div class="tt" id="toast"></div>
+<div class="offline-bar" id="offlineBar">⚠️ 网络已断开，部分功能不可用</div>
+<button class="fab" id="fabApply" title="快速提交培训申请">+</button>
 
+<script src="/js/icons.js"></script>
 <script src="/js/app.js"></script>
 </body>
 </html>
