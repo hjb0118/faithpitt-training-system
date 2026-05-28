@@ -3143,9 +3143,10 @@ function viewSummary(id) {
     ALL_USERS.forEach(function(u) { nameSet[u.name] = true; });
     var names = Object.keys(nameSet).sort();
     var cur = sel.value;
-      var selH = '<option value="">选择员工</option>';
-      for (var si = 0; si < names.length; si++) selH += '<option ' + (names[si] === cur ? 'selected' : '') + '>' + esc(names[si]) + '</option>';
-      sel.innerHTML = selH;
+    var selH = '<option value="">选择员工</option>';
+    for (var si = 0; si < names.length; si++) selH += '<option ' + (names[si] === cur ? 'selected' : '') + '>' + esc(names[si]) + '</option>';
+    sel.innerHTML = selH;
+    sel.value = cur; // 恢复选中状态
 
     var content = document.getElementById('profileContent');
     var exportBtn = document.getElementById('hrExportReportBtn');
