@@ -118,11 +118,84 @@
     }).then(function(r) { return r.json().then(function(j) { j._status = r.status; if (handleAuthError(j)) throw 'auth'; return j; }); }).catch(function(e) { if (e === 'auth') return { ok: false }; toast('网络错误，请检查连接'); return { ok: false }; });
   }
 
-  function toast(msg) {
-    var t = document.getElementById('toast');
+  // Toast 队列管理
+  var toastQueue = [];
+  var maxToasts = 3;
+  
+  function toast(msg, type, duration) {
+    type = type || '';
+    duration = duration || 2500;
+    
+    var container = document.getElementById('toastContainer');
+    if (!container) return;
+    
+    // 创建 toast 元素
+    var t = document.createElement('div');
+    t.className = 'tt' + (type ? ' ' + type : '');
     t.textContent = msg;
-    t.classList.add('sh');
-    setTimeout(function() { t.classList.remove('sh'); }, 2500);
+    container.appendChild(t);
+    
+    // 添加到队列
+    toastQueue.push(t);
+    
+    // 移除多余的 toast
+    while (toastQueue.length > maxToasts) {
+      var old = toastQueue.shift();
+      if (old.parentNode) {
+        old.classList.add('hide');
+        setTimeout(function() { if (old.parentNode) old.parentNode.removeChild(old); }, 200);
+      }
+    }
+    
+    // 触发动画
+    requestAnimationFrame(function() {
+      t.classList.add('show');
+    });
+    
+    // 自动移除
+    setTimeout(function() {
+      t.classList.remove('show');
+      t.classList.add('hide');
+      setTimeout(function() {
+        if (t.parentNode) t.parentNode.removeChild(t);
+        var idx = toastQueue.indexOf(t);
+        if (idx > -1) toastQueue.splice(idx, 1);
+      }, 200);
+    }, duration);
+  }
+
+  // ─── 骨架屏加载状态 ───
+  function showSkeleton(page) {
+    var container = document.getElementById('p-' + page);
+    if (!container) return;
+    
+    // 保存原始内容
+    if (!container._originalContent) {
+      container._originalContent = container.innerHTML;
+    }
+    
+    // 生成骨架屏 HTML
+    var skeletonHtml = '';
+    if (page === 'dash') {
+      skeletonHtml = '<div class="skeleton"><div class="skeleton-title"></div><div class="skeleton-row"><div class="skeleton-cell"></div><div class="skeleton-cell"></div><div class="skeleton-cell"></div></div><div class="skeleton-row"><div class="skeleton-cell"></div><div class="skeleton-cell"></div></div></div>';
+    } else if (page === 'all' || page === 'my') {
+      skeletonHtml = '<div class="skeleton"><div class="skeleton-title"></div><div class="skeleton-line long"></div><div class="skeleton-line long"></div><div class="skeleton-line medium"></div><div class="skeleton-line short"></div></div>';
+    } else if (page === 'log' || page === 'users') {
+      skeletonHtml = '<div class="skeleton"><div class="skeleton-title"></div><div class="skeleton-line long"></div><div class="skeleton-line long"></div><div class="skeleton-line long"></div><div class="skeleton-line medium"></div></div>';
+    } else {
+      skeletonHtml = '<div class="skeleton"><div class="skeleton-title"></div><div class="skeleton-line long"></div><div class="skeleton-line medium"></div></div>';
+    }
+    
+    container.innerHTML = skeletonHtml;
+  }
+  
+  function hideSkeleton(page) {
+    var container = document.getElementById('p-' + page);
+    if (!container || !container._originalContent) return;
+    
+    // 恢复原始内容
+    container.innerHTML = container._originalContent;
+    delete container._originalContent;
   }
 
   // ─── 附件预览 ───
@@ -422,6 +495,13 @@
       if (navItems[j].getAttribute('data-p') === page) navItems[j].classList.add('on');
       else navItems[j].classList.remove('on');
     }
+    
+    // 显示骨架屏（仅对需要加载数据的页面）
+    var skeletonPages = ['dash', 'all', 'log', 'my', 'todos', 'profile', 'users'];
+    if (skeletonPages.indexOf(page) > -1) {
+      showSkeleton(page);
+    }
+    
     if (page === 'my') {
       // 同步Tab样式
       var pendingTab = document.getElementById('myTabPending');
@@ -506,6 +586,7 @@
   var MY_TAB = 'pending'; // pending | done
 
   function renderMy() {
+    hideSkeleton('my');
     var data = ALL_DATA;
     var tb = document.getElementById('myTb');
 
@@ -531,9 +612,9 @@
 
     if (filtered.length === 0) {
       if (MY_TAB === 'pending') {
-        tb.innerHTML = '<tr><td colspan="6"><div class="em"><img src="/uploads/3.png" alt="" style="width:60px;height:60px;margin-bottom:10px" onerror="this.style.display=\'none\'"><p>暂无待处理培训</p><small>提交培训申请后会在这里显示</small><br><span class="es-btn" onclick="go(\'apply\')" style="margin-top:16px;display:inline-block;padding:8px 20px;background:var(--primary-dark);color:#0D1A08;border-radius:6px;font-size:13px;cursor:pointer;font-weight:600">立即申请</span></div></td></tr>';
+        tb.innerHTML = '<tr><td colspan="6"><div class="em"><img src="/uploads/3.png" alt="" style="width:60px;height:60px;margin-bottom:10px" onerror="this.style.display=\'none\'"><h4>暂无待处理培训</h4><p>提交培训申请后会在这里显示，随时跟踪审批进度</p><button class="em-btn" onclick="go(\'apply\')">📝 立即申请</button></div></td></tr>';
       } else {
-        tb.innerHTML = '<tr><td colspan="6"><div class="em"><img src="/uploads/1 (13).png" alt="" style="width:56px;height:56px;margin-bottom:10px;opacity:0.85" onerror="this.style.display=\'none\'"><p>暂无已完成记录</p><small>完成培训后会显示在这里</small></div></td></tr>';
+        tb.innerHTML = '<tr><td colspan="6"><div class="em"><img src="/uploads/1 (13).png" alt="" style="width:56px;height:56px;margin-bottom:10px;opacity:0.85" onerror="this.style.display=\'none\'"><h4>暂无已完成记录</h4><p>完成培训后会显示在这里，查看您的学习成果</p></div></td></tr>';
       }
       return;
     }
@@ -1391,7 +1472,10 @@ function viewSummary(id) {
 
   function renderNotif() {
     var el = document.getElementById('notifList');
-    if (ALL_NOTIFS.length === 0) { el.innerHTML = '<div class="em"><p>暂无通知</p></div>'; return; }
+    if (ALL_NOTIFS.length === 0) {
+      el.innerHTML = '<div class="em"><span class="em-icon">🔔</span><h4>暂无通知</h4><p>当有新的培训申请、审批结果或待办事项时，会在这里通知您</p></div>';
+      return;
+    }
     var unreadIds = [];
     for (var u = 0; u < ALL_NOTIFS.length; u++) { if (!ALL_NOTIFS[u].read) unreadIds.push(ALL_NOTIFS[u].id); }
     if (unreadIds.length > 0) {
@@ -1448,6 +1532,7 @@ function viewSummary(id) {
   }
 
   function renderDash() {
+    hideSkeleton('dash');
     // ── 时间筛选按钮（一次性绑定） ──
     var rangeBar = document.getElementById('dashRangeBar');
     if (rangeBar && !rangeBar._bound) {
@@ -1787,6 +1872,7 @@ function viewSummary(id) {
   }
 
     function renderAll() {
+    hideSkeleton('all');
     SELECTED = {};
     var data = ALL_DATA.slice();
     var deptSet = {};
@@ -1817,7 +1903,10 @@ function viewSummary(id) {
     var sc = { '待审批':'bdo','已通过':'bdg','已驳回':'bdr','学习中':'bdb','总结已提交':'bdb','待评审':'bdp','30天已回访':'bdp','已完成':'bdg','已撤回':'bdy' };
     var si = { '待审批':'⏳','已通过':'✅','已驳回':'❌','学习中':'📖','总结已提交':'📝','待评审':'👁️','30天已回访':'🔄','已完成':'🎯','已撤回':'↩️' };
     var tb = document.getElementById('allTb');
-    if (data.length === 0) { tb.innerHTML = '<tr><td colspan="10"><div class="em"><img src="/uploads/1 (13).png" alt="" style="width:56px;height:56px;margin-bottom:10px;opacity:0.85" onerror="this.style.display=\'none\'"><p>暂无培训记录</p><small>员工提交培训申请后会在此显示</small></div></td></tr>'; return; }
+    if (data.length === 0) {
+      tb.innerHTML = '<tr><td colspan="10"><div class="em"><img src="/uploads/1 (13).png" alt="" style="width:56px;height:56px;margin-bottom:10px;opacity:0.85" onerror="this.style.display=\'none\'"><h4>暂无培训记录</h4><p>员工提交培训申请后会在此显示，您可以查看所有培训的详细信息和状态</p>' + (ME.role === 'hr' ? '<button class="em-btn" onclick="go(\'apply\')">📝 查看申请</button>' : '') + '</div></td></tr>';
+      return;
+    }
     var isHRUser = ME.role === 'hr';
     var h = '';
     for (var ri = 0; ri < data.length; ri++) {
@@ -2514,6 +2603,176 @@ function viewSummary(id) {
     toast('已导出 ' + data.length + ' 条记录');
   });
 
+  // ─── 培训记录批量导入（Excel） ───
+  document.getElementById('importRecordsBtn').addEventListener('click', function() {
+    openImportRecordsModal();
+  });
+
+  function openImportRecordsModal() {
+    var h = '<div style="margin-bottom:16px">';
+    h += '<p style="font-size:13px;color:#666;margin-bottom:12px">支持导入 Excel（.xlsx）格式的培训记录，系统会自动校验数据格式。</p>';
+    h += '<button class="bt" id="downloadTemplate" style="margin-bottom:12px">📥 下载导入模板</button>';
+    h += '</div>';
+    h += '<div class="fg"><label>选择Excel文件</label><input type="file" id="import-excel" accept=".xlsx,.xls"></div>';
+    h += '<div id="import-records-preview" style="margin-top:12px;font-size:13px;max-height:300px;overflow-y:auto"></div>';
+    h += '<div class="fa"><button class="bt" id="import-records-cancel">取消</button><button class="bt btp" id="import-records-confirm" disabled>导入</button></div>';
+    openM('批量导入培训记录', h);
+
+    document.getElementById('import-records-cancel').addEventListener('click', closeM);
+
+    // 下载模板
+    document.getElementById('downloadTemplate').addEventListener('click', function() {
+      if (typeof XLSX === 'undefined') {
+        toast('Excel库未加载，请刷新页面重试');
+        return;
+      }
+      var header = ['姓名','部门','培训项目','培训机构','培训类型','培训日期','费用','地点','学习目标','承诺产出'];
+      var example = ['张三','品牌营销中心','产品知识培训','内部','内部培训','2026-05-27','500','公司会议室','学习产品知识','掌握产品卖点'];
+      var wsData = [header, example];
+      var ws = XLSX.utils.aoa_to_sheet(wsData);
+      ws['!cols'] = [{wch:10},{wch:15},{wch:25},{wch:15},{wch:10},{wch:12},{wch:10},{wch:15},{wch:30},{wch:30}];
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '导入模板');
+      XLSX.writeFile(wb, '培训记录导入模板.xlsx');
+      toast('模板已下载');
+    });
+
+    var parsedRecords = [];
+
+    document.getElementById('import-excel').addEventListener('change', function(e) {
+      var file = e.target.files[0];
+      if (!file) return;
+
+      var reader = new FileReader();
+      reader.onload = function(ev) {
+        try {
+          var data = new Uint8Array(ev.target.result);
+          var workbook = XLSX.read(data, { type: 'array' });
+          var sheet = workbook.Sheets[workbook.SheetNames[0]];
+          var json = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+          if (json.length < 2) {
+            document.getElementById('import-records-preview').innerHTML = '<div style="color:var(--danger)">文件为空或格式错误</div>';
+            return;
+          }
+
+          var header = json[0];
+          var rows = json.slice(1);
+          parsedRecords = [];
+          var errors = [];
+
+          // 字段映射
+          var fieldMap = {
+            '姓名': '员工', '员工': '员工', '部门': '部门', '培训项目': '培训项目',
+            '培训机构': '培训机构', '培训类型': '培训类型', '培训日期': '培训日期',
+            '费用': '费用', '地点': '地点', '学习目标': '学习目标', '承诺产出': '承诺产出'
+          };
+
+          rows.forEach(function(row, idx) {
+            if (row.length === 0 || !row[0]) return; // 跳过空行
+
+            var record = {};
+            header.forEach(function(h, i) {
+              var fieldName = fieldMap[h] || h;
+              record[fieldName] = row[i] !== undefined ? String(row[i]) : '';
+            });
+
+            // 校验必填字段
+            var rowNum = idx + 2;
+            if (!record['员工']) {
+              errors.push('第' + rowNum + '行：姓名不能为空');
+              return;
+            }
+            if (!record['培训项目']) {
+              errors.push('第' + rowNum + '行：培训项目不能为空');
+              return;
+            }
+            if (!record['培训日期']) {
+              errors.push('第' + rowNum + '行：培训日期不能为空');
+              return;
+            }
+
+            // 校验日期格式
+            if (record['培训日期'] && !/^\d{4}-\d{2}-\d{2}$/.test(record['培训日期'])) {
+              errors.push('第' + rowNum + '行：日期格式应为 YYYY-MM-DD');
+              return;
+            }
+
+            // 校验费用
+            if (record['费用'] && isNaN(parseFloat(record['费用']))) {
+              errors.push('第' + rowNum + '行：费用必须是数字');
+              return;
+            }
+
+            // 设置默认值
+            record['部门'] = record['部门'] || '';
+            record['培训机构'] = record['培训机构'] || '';
+            record['培训类型'] = record['培训类型'] || '其他';
+            record['费用'] = parseFloat(record['费用']) || 0;
+            record['地点'] = record['地点'] || '';
+            record['学习目标'] = record['学习目标'] || '';
+            record['承诺产出'] = record['承诺产出'] || '';
+            record['状态'] = '待审批';
+
+            parsedRecords.push(record);
+          });
+
+          var preview = '';
+          if (errors.length > 0) {
+            preview += '<div style="color:var(--danger);margin-bottom:8px"><b>校验错误：</b><br>' + errors.join('<br>') + '</div>';
+          }
+          if (parsedRecords.length > 0) {
+            preview += '<div style="color:var(--success);margin-bottom:8px;font-weight:600">将导入 <b>' + parsedRecords.length + '</b> 条记录</div>';
+            preview += '<div style="background:var(--bg);padding:8px;border-radius:6px;font-size:12px;max-height:200px;overflow-y:auto">';
+            preview += '<table style="width:100%"><tr><th>姓名</th><th>部门</th><th>培训项目</th><th>日期</th><th>费用</th></tr>';
+            parsedRecords.slice(0, 10).forEach(function(r) {
+              preview += '<tr><td>' + esc(r['员工']) + '</td><td>' + esc(r['部门']) + '</td><td>' + esc(r['培训项目']) + '</td><td>' + esc(r['培训日期']) + '</td><td>' + r['费用'] + '</td></tr>';
+            });
+            if (parsedRecords.length > 10) {
+              preview += '<tr><td colspan="5" style="text-align:center;color:#999">... 还有 ' + (parsedRecords.length - 10) + ' 条</td></tr>';
+            }
+            preview += '</table></div>';
+          } else {
+            preview += '<div style="color:var(--text-muted)">未识别到有效数据</div>';
+          }
+
+          document.getElementById('import-records-preview').innerHTML = preview;
+          document.getElementById('import-records-confirm').disabled = parsedRecords.length === 0;
+        } catch (err) {
+          document.getElementById('import-records-preview').innerHTML = '<div style="color:var(--danger)">文件解析失败：' + err.message + '</div>';
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    });
+
+    document.getElementById('import-records-confirm').addEventListener('click', function() {
+      if (parsedRecords.length === 0) return;
+
+      this.disabled = true;
+      this.textContent = '导入中...';
+      toast('正在导入...');
+
+      // 批量提交到服务器
+      var ok = 0, fail = 0;
+      var promises = parsedRecords.map(function(record) {
+        return fetch('/api/apply', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(record)
+        }).then(function(r) { return r.json(); }).then(function(r) {
+          if (r.ok) ok++;
+          else fail++;
+        }).catch(function() { fail++; });
+      });
+
+      Promise.all(promises).then(function() {
+        closeM();
+        toast('导入完成：成功 ' + ok + ' 条' + (fail > 0 ? '，失败 ' + fail + ' 条' : ''));
+        refreshData().then(function() { renderAll(); });
+      });
+    });
+  }
+
   var debounceTimer;
   function debounceRender() { clearTimeout(debounceTimer); debounceTimer = setTimeout(renderAll, 300); }
   ['f-q','f-from','f-to'].forEach(function(id) {
@@ -2525,6 +2784,7 @@ function viewSummary(id) {
   document.getElementById('f-archived').addEventListener('change', renderAll);
 
   function renderTodos() {
+    hideSkeleton('todos');
     var el = document.getElementById('todoList');
     var now = new Date();
     var weekEnd = new Date(now);
@@ -2636,6 +2896,7 @@ function viewSummary(id) {
   }
 
   function renderProfile() {
+    hideSkeleton('profile');
     var sel = document.getElementById('pf-emp');
     var nameSet = {};
     ALL_DATA.forEach(function(r) { if (r['员工']) nameSet[r['员工']] = true; });
@@ -3159,6 +3420,7 @@ function viewSummary(id) {
   var LOG_PAGE = 1, LOG_SIZE = 20, LOG_TOTAL = 0, ALL_LOG_FILTERED = [];
 
   function renderLog() {
+    hideSkeleton('log');
     var logs = ALL_LOGS.slice();
     var q = document.getElementById('l-q').value.toLowerCase();
     if (q) logs = logs.filter(function(l) { return (l.operator + l.action + l.detail).toLowerCase().indexOf(q) >= 0; });
@@ -3185,7 +3447,7 @@ function viewSummary(id) {
     var start = (LOG_PAGE - 1) * LOG_SIZE;
     var page = ALL_LOG_FILTERED.slice(start, start + LOG_SIZE);
     if (total === 0) {
-      tb.innerHTML = '<tr><td colspan="4"><div class="em"><p>暂无日志</p></div></td></tr>';
+      tb.innerHTML = '<tr><td colspan="4"><div class="em"><span class="em-icon">📋</span><h4>暂无操作日志</h4><p>系统会自动记录所有重要操作，方便追溯和审计</p></div></td></tr>';
     } else {
       var h = '';
       for (var i = 0; i < page.length; i++) {
@@ -3257,8 +3519,12 @@ function viewSummary(id) {
   });
 
   function renderUsers() {
+    hideSkeleton('users');
     var tb = document.getElementById('userTb');
-    if (ALL_USERS.length === 0) { tb.innerHTML = '<tr><td colspan="5"><div class="em"><p>暂无用户</p></div></td></tr>'; return; }
+    if (ALL_USERS.length === 0) {
+      tb.innerHTML = '<tr><td colspan="5"><div class="em"><span class="em-icon">👥</span><h4>暂无用户</h4><p>添加员工账号后，他们可以登录系统提交培训申请</p><button class="em-btn" onclick="showAddUser()">➕ 添加用户</button></div></td></tr>';
+      return;
+    }
     var h = '';
     for (var i = 0; i < ALL_USERS.length; i++) {
       var u = ALL_USERS[i];
@@ -4099,7 +4365,7 @@ function viewSummary(id) {
   function renderDept() {
     var el = document.getElementById('deptList');
     if (ALL_DEPTS.length === 0) {
-      el.innerHTML = '<div class="em"><p>暂无部门，请先添加</p></div>';
+      el.innerHTML = '<div class="em"><span class="em-icon">🏢</span><h4>暂无部门</h4><p>添加部门后可以按部门筛选和统计培训数据</p></div>';
     } else {
       var usedDepts = {};
       ALL_DATA.forEach(function(r) { if (r['部门']) usedDepts[r['部门']] = (usedDepts[r['部门']] || 0) + 1; });

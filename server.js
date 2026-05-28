@@ -5,6 +5,7 @@ const path = require('path');
 const os = require('os');
 const url = require('url');
 const wechat = require('./wechat_notify');
+const dbAdapter = require('./db-adapter');
 
 const https = require('https');
 
@@ -174,36 +175,16 @@ function generateToken() {
 // ─── 文件锁（防止并发写冲突） ───
 let writeLock = Promise.resolve();
 function safeWrite(data) {
-  writeLock = writeLock.then(() => {
-    return new Promise((resolve) => {
-      const tmp = DATA_FILE + '.tmp';
-      fs.writeFile(tmp, JSON.stringify(data, null, 2), (err) => {
-        if (err) { console.error('[safeWrite] 写入失败:', err.message); resolve(); return; }
-        fs.rename(tmp, DATA_FILE, (rErr) => { if (rErr) console.error('[safeWrite] 重命名失败:', rErr.message); resolve(); });
-      });
-    });
-  });
-  return writeLock;
+  // SQLite已经自动保存，这个函数主要用于兼容旧代码
+  return Promise.resolve();
 }
 
 function readData() {
-  try {
-    var d = JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
-    if (!d.users) d.users = [];
-    if (!d.records) d.records = [];
-    if (!d.logs) d.logs = [];
-    if (!d.notifications) d.notifications = [];
-    if (!d.depts) d.depts = [];
-    if (typeof d.nextId !== 'number') d.nextId = 1;
-    return d;
-  } catch (e) {
-    return { users: [], records: [], logs: [], notifications: [], depts: [], nextId: 1 };
-  }
+  return dbAdapter.readData();
 }
 
 function addLog(db, operator, action, detail) {
-  db.logs.unshift({ time: new Date().toLocaleString('zh-CN'), operator: operator, action: action, detail: detail });
-  if (db.logs.length > 5000) db.logs.length = 5000;
+  dbAdapter.addLog(operator, action, detail);
 }
 
 function parseMultipart(buffer, boundary) {
@@ -1731,10 +1712,7 @@ function scheduleReminders() {
 }
 scheduleReminders();
 
-// 初始化数据文件
-if (!fs.existsSync(DATA_FILE)) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify({ users: [], records: [], logs: [], notifications: [], nextId: 1 }, null, 2));
-}
+// 初始化数据库（已由db-adapter自动完成）
 
 server.listen(PORT, '0.0.0.0', function() {
   console.log('');

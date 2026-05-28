@@ -218,7 +218,8 @@
           <input type="checkbox" id="f-archived" style="width:auto;vertical-align:middle;margin-right:3px">归档
         </label>
         <button class="bt btp" id="addBtn">+ 新增</button>
-        <button class="bt" id="exportBtn">导出CSV</button>
+        <button class="bt" id="exportBtn">导出Excel</button>
+        <button class="bt" id="importRecordsBtn">📥 导入</button>
       </div>
       <div class="batch-bar" id="batchBar">
         <span id="batchCount">已选 0 条</span>
@@ -471,7 +472,7 @@
 <div class="mo" id="modalBg">
   <div class="md"><div class="mh"><h3 id="mTitle"></h3><button class="mx" id="modalClose">x</button></div><div class="mb" id="mBody"></div></div>
 </div>
-<div class="tt" id="toast"></div>
+<div class="tt-container" id="toastContainer"></div>
 <div class="offline-bar" id="offlineBar">⚠️ 网络已断开，部分功能不可用</div>
 <button class="fab" id="fabApply" title="快速提交培训申请">+</button>
 

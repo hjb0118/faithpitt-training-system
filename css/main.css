@@ -736,31 +736,164 @@ tbody tr:hover td{background:var(--primary-bg)}
 .mb{padding:24px}
 
 /* Toast 通知 */
-.tt{
+.tt-container{
   position:fixed;
   bottom:28px;
   left:50%;
-  transform:translateX(-50%) translateY(90px);
+  transform:translateX(-50%);
+  z-index:300;
+  display:flex;
+  flex-direction:column-reverse;
+  gap:8px;
+  pointer-events:none;
+}
+.tt{
   background:var(--text);
   color:#fff;
   padding:11px 22px;
   border-radius:var(--radius-full);
   font-size:13.5px;
   box-shadow:var(--shadow-lg);
-  transition:transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
-  z-index:300;
   max-width:90vw;
   white-space:nowrap;
+  opacity:0;
+  transform:translateY(20px) scale(0.95);
+  transition:all 0.3s cubic-bezier(0.34,1.56,0.64,1);
+  pointer-events:auto;
 }
-.tt.sh{transform:translateX(-50%) translateY(0)}
+.tt.show{
+  opacity:1;
+  transform:translateY(0) scale(1);
+}
+.tt.hide{
+  opacity:0;
+  transform:translateY(-10px) scale(0.95);
+  transition:all 0.2s ease-in;
+}
 .tt.success{background:var(--success);color:#fff}
 .tt.error{background:var(--danger);color:#fff}
 /* warning toast：深色背景保证对比度 */
 .tt.warning{background:var(--warning-dark,#9A9000);color:#fff}
-.em{text-align:center;padding:48px 20px;color:var(--text-muted);display:flex;flex-direction:column;align-items:center;justify-content:center}
-.em-icon{font-size:42px;margin-bottom:12px;opacity:0.4;display:block}
-.em p{font-size:14px;margin-bottom:14px}
-.em small{font-size:12px;opacity:0.7}
+
+/* 骨架屏加载状态 */
+.skeleton{
+  background:var(--bg-card);
+  border-radius:var(--radius-lg);
+  padding:20px;
+  margin-bottom:16px;
+}
+.skeleton-line{
+  height:14px;
+  background:linear-gradient(90deg,var(--border) 25%,var(--bg) 50%,var(--border) 75%);
+  background-size:200% 100%;
+  animation:skeleton-loading 1.5s infinite;
+  border-radius:4px;
+  margin-bottom:12px;
+}
+.skeleton-line:last-child{
+  margin-bottom:0;
+}
+.skeleton-line.short{width:60%}
+.skeleton-line.medium{width:80%}
+.skeleton-line.long{width:100%}
+.skeleton-card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--radius-lg);
+  padding:20px;
+  margin-bottom:16px;
+}
+.skeleton-title{
+  height:20px;
+  width:40%;
+  background:linear-gradient(90deg,var(--border) 25%,var(--bg) 50%,var(--border) 75%);
+  background-size:200% 100%;
+  animation:skeleton-loading 1.5s infinite;
+  border-radius:4px;
+  margin-bottom:16px;
+}
+.skeleton-row{
+  display:flex;
+  gap:16px;
+  margin-bottom:12px;
+}
+.skeleton-cell{
+  flex:1;
+  height:14px;
+  background:linear-gradient(90deg,var(--border) 25%,var(--bg) 50%,var(--border) 75%);
+  background-size:200% 100%;
+  animation:skeleton-loading 1.5s infinite;
+  border-radius:4px;
+}
+.skeleton-cell:first-child{flex:2}
+.skeleton-cell:last-child{flex:0.5}
+@keyframes skeleton-loading{
+  0%{background-position:200% 0}
+  100%{background-position:-200% 0}
+}
+
+/* 空状态引导 */
+.em{
+  text-align:center;
+  padding:60px 20px;
+  color:var(--text-muted);
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  min-height:200px;
+}
+.em-icon{
+  font-size:48px;
+  margin-bottom:16px;
+  opacity:0.3;
+  display:block;
+}
+.em h4{
+  font-size:16px;
+  color:var(--text-secondary);
+  margin-bottom:8px;
+  font-weight:600;
+}
+.em p{
+  font-size:14px;
+  margin-bottom:20px;
+  max-width:300px;
+  line-height:1.6;
+}
+.em-btn{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:10px 20px;
+  background:var(--primary);
+  color:var(--text);
+  border:none;
+  border-radius:var(--radius-md);
+  font-size:13px;
+  font-weight:600;
+  cursor:pointer;
+  transition:var(--transition);
+}
+.em-btn:hover{
+  background:var(--primary-dark);
+  transform:translateY(-1px);
+  box-shadow:var(--shadow-md);
+}
+.em-btn.secondary{
+  background:transparent;
+  border:1.5px solid var(--border);
+  color:var(--text-secondary);
+}
+.em-btn.secondary:hover{
+  background:var(--bg);
+  border-color:var(--border-strong);
+}
+.em small{
+  font-size:12px;
+  opacity:0.6;
+  margin-top:12px;
+}
 
 /* 批量操作栏 */
 .batch-bar{
@@ -1159,7 +1292,7 @@ select{min-height:44px}
   td{padding:6px 8px}
   .bd{border:1px solid #ccc!important;padding:2px 6px!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
   .mo{display:none!important}
-  .tt{display:none!important}
+  .tt-container{display:none!important}
   a{color:#333!important;text-decoration:none}
   .pt{font-size:18px;margin-bottom:8px}
   .pd{font-size:11px;margin-bottom:12px}
