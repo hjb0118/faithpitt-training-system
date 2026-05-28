@@ -3144,20 +3144,21 @@ function viewSummary(id) {
     var names = Object.keys(nameSet).sort();
     var cur = sel.value;
     var selH = '<option value="">选择员工</option>';
-    for (var si = 0; si < names.length; si++) selH += '<option ' + (names[si] === cur ? 'selected' : '') + '>' + esc(names[si]) + '</option>';
+    for (var si = 0; si < names.length; si++) selH += '<option value="' + esc(names[si]) + '" ' + (names[si] === cur ? 'selected' : '') + '>' + esc(names[si]) + '</option>';
     sel.innerHTML = selH;
-    sel.value = cur; // 恢复选中状态
+    if (cur) sel.value = cur; // 恢复选中状态
 
     var content = document.getElementById('profileContent');
     var exportBtn = document.getElementById('hrExportReportBtn');
-    if (!cur) {
+    var selectedEmp = sel.value; // 用sel.value而不是cur
+    if (!selectedEmp) {
       content.innerHTML = '<div class="em"><p>请选择一位员工查看成长档案</p></div>';
       if (exportBtn) exportBtn.style.display = 'none';
       return;
     }
     if (exportBtn) exportBtn.style.display = (ME.role === 'hr' ? '' : 'none');
 
-    var records = ALL_DATA.filter(function(r) { return r['员工'] === cur; });
+    var records = ALL_DATA.filter(function(r) { return r['员工'] === selectedEmp; });
     var totalCost = 0, totalTrainings = records.length, avgScore = 0, scoreCount = 0;
     var statusMap = {}, typeMap = {}, yearMap = {};
 
@@ -3172,11 +3173,11 @@ function viewSummary(id) {
       if (r['评估分数']) { avgScore += parseInt(r['评估分数']); scoreCount++; }
     });
 
-    var empInfo = ALL_USERS.find(function(u) { return u.name === cur; });
+    var empInfo = ALL_USERS.find(function(u) { return u.name === selectedEmp; });
     var dept = empInfo ? empInfo.dept : (records[0] ? records[0]['部门'] : '-');
 
     var h = '<div class="profile-card">';
-    h += '<div class="profile-name">' + esc(cur) + '</div>';
+    h += '<div class="profile-name">' + esc(selectedEmp) + '</div>';
     h += '<div class="profile-meta">部门：' + esc(dept) + ' | 累计培训 ' + totalTrainings + ' 次</div>';
     h += '<div class="profile-stats">';
     h += '<div class="st"><div class="st-l">累计费用</div><div class="st-v g">¥' + fmt(totalCost) + '</div></div>';
