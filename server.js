@@ -201,11 +201,13 @@ function generateToken() {
   return crypto.randomBytes(32).toString('hex');
 }
 
-// ─── 文件锁（防止并发写冲突） ───
-let writeLock = Promise.resolve();
+// ─── 数据持久化（将内存修改同步到SQLite） ───
 function safeWrite(data) {
-  // SQLite已经自动保存，这个函数主要用于兼容旧代码
-  return Promise.resolve();
+  try {
+    dbAdapter.safeWrite(data);
+  } catch (e) {
+    console.error('[safeWrite] Error:', e.message);
+  }
 }
 
 function readData() {
@@ -304,6 +306,10 @@ setInterval(function() {
   // 清理过期限流记录
   for (var ip in LOGIN_RATE_LIMIT) {
     if (LOGIN_RATE_LIMIT[ip].resetAt < now) delete LOGIN_RATE_LIMIT[ip];
+  }
+  // 清理过期API限流记录
+  for (var ip2 in API_RATE_LIMIT) {
+    if (API_RATE_LIMIT[ip2].resetAt < now) delete API_RATE_LIMIT[ip2];
   }
 }, 60 * 60 * 1000);
 
@@ -1099,7 +1105,7 @@ var server = http.createServer(function(req, res) {
             var db = readData();
             var ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
             var backupFile = path.join(BACKUP_DIR, 'backup_' + ts + '.json');
-            fs.copyFileSync(DATA_FILE, backupFile);
+            fs.writeFileSync(backupFile, JSON.stringify(db, null, 2), 'utf-8');
             addLog(db, currentUser.name, 'backup', ts);
             safeWrite(db);
             sendJson(res, { ok: true, file: 'backup_' + ts + '.json' });
@@ -1149,10 +1155,17 @@ var server = http.createServer(function(req, res) {
               // 备份当前数据再恢复
               var ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
               var emergencyBackup = path.join(BACKUP_DIR, 'before_restore_' + ts + '.json');
-              fs.copyFileSync(DATA_FILE, emergencyBackup);
-              fs.copyFileSync(bfPath, DATA_FILE);
-              addLog(db, currentUser.name, 'restoreBackup', bf + '（恢复前已备份为 ' + path.basename(emergencyBackup) + '）');
-              safeWrite(readData()); // 刷新内存中的数据
+              var currentData = readData();
+              fs.writeFileSync(emergencyBackup, JSON.stringify(currentData, null, 2), 'utf-8');
+              // 从JSON备份恢复到SQLite
+              var restoreData = JSON.parse(fs.readFileSync(bfPath, 'utf-8'));
+              if (!restoreData.nextId && restoreData.nextId !== 0) restoreData.nextId = 10;
+              if (!restoreData.depts) restoreData.depts = [];
+              if (!restoreData.budgets) restoreData.budgets = [];
+              if (!restoreData.settings) restoreData.settings = {};
+              if (!restoreData.notifications) restoreData.notifications = [];
+              safeWrite(restoreData);
+              addLog(readData(), currentUser.name, 'restoreBackup', bf + '（恢复前已备份为 ' + path.basename(emergencyBackup) + '）');
               sendJson(res, { ok: true, msg: '已从 ' + bf + ' 恢复（恢复前已自动备份当前数据）' });
             } catch(e) {
               sendJson(res, { ok: false, msg: '读取备份失败：' + e.message });
@@ -1533,8 +1546,9 @@ function runAutoBackup() {
     var db = readData();
     var ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     var backupFile = path.join(BACKUP_DIR, 'backup_' + ts + '.json');
-    fs.copyFileSync(DATA_FILE, backupFile);
+    fs.writeFileSync(backupFile, JSON.stringify(db, null, 2), 'utf-8');
     addLog(db, '系统', 'autoBackup', ts);
+    safeWrite(db);
     cleanOldBackups();
     console.log('  [AutoBackup] Saved at ' + ts);
   } catch(e) { console.log('  [AutoBackup] Failed: ' + e.message); }

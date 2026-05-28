@@ -1,44 +1,57 @@
 /**
  * 数据库适配层
  * 提供与原data.json相同的接口，但底层使用SQLite
- * 
+ *
  * 使用方式：
  *   const dbAdapter = require('./db-adapter');
- *   const db = dbAdapter.readData();  // 返回与原data.json相同格式的对象
- *   dbAdapter.safeWrite(db);          // 保存数据
+ *   const data = dbAdapter.readData();  // 返回与原data.json相同格式的对象
+ *   // ... 在内存中修改 data ...
+ *   dbAdapter.safeWrite(data);          // 将内存中的修改持久化到SQLite
  */
 
-const db = require('./db');
+const dbModule = require('./db');
 
 // 初始化数据库
-db.initDatabase();
+dbModule.initDatabase();
 
 /**
  * 读取数据（兼容原data.json格式）
+ * 
+ * 重要：返回的是全新对象，修改后必须调用 safeWrite() 才能持久化！
  */
 function readData() {
   try {
-    const records = db.getAllRecords();
-    const users = db.getAllUsers();
-    const logs = db.getAllLogs();
-    const depts = db.getDepts();
-    const settings = db.getSettings();
-    const budgets = db.getBudgets();
-    
-    // 获取通知（可能是数组或对象格式）
-    const notifs = db.getNotifications();
+    const records = dbModule.getAllRecords();
+    const users = dbModule.getAllUsers();
+    const logs = dbModule.getAllLogs();
+    const depts = dbModule.getDepts();
+    const settings = dbModule.getSettings();
+    const budgets = dbModule.getBudgets();
+
+    // 获取通知（数组格式）
+    const notifs = dbModule.getNotifications();
     let notifications = [];
     if (notifs.notifications) {
       try { notifications = JSON.parse(notifs.notifications); } catch { notifications = []; }
     } else {
       notifications = Object.entries(notifs).map(([id, msg]) => ({ id, message: msg }));
     }
-    
-    // 获取nextId
-    const idCounters = db.getDb().prepare('SELECT * FROM id_counters').all();
-    const nextId = {};
-    idCounters.forEach(r => { nextId[r.name] = r.value; });
-    
+
+    // 获取nextId（返回数字，兼容原data.json格式）
+    const idCounters = dbModule.getDb().prepare('SELECT * FROM id_counters').all();
+    let nextId = 10; // 默认值
+    const nc = idCounters.find(r => r.name === 'next');
+    if (nc) nextId = nc.value;
+    // 如果id_counters为空，从现有记录推算
+    if (!nc && records.length > 0) {
+      var maxNum = 0;
+      records.forEach(r => {
+        var m = String(r.ID || '').match(/^R(\d+)$/);
+        if (m && parseInt(m[1]) > maxNum) maxNum = parseInt(m[1]);
+      });
+      if (maxNum > 0) nextId = maxNum + 1;
+    }
+
     return {
       records: records,
       users: users,
@@ -51,78 +64,198 @@ function readData() {
     };
   } catch (e) {
     console.error('[db-adapter] readData error:', e);
-    return { records: [], users: [], logs: [], notifications: [], depts: [], budgets: [], settings: {}, nextId: {} };
+    return { records: [], users: [], logs: [], notifications: [], depts: [], budgets: [], settings: {}, nextId: 10 };
   }
 }
 
 /**
- * 保存数据（兼容原safeWrite接口）
- * 注意：SQLite是事务性的，不需要像JSON那样整体写入
- * 这个函数主要用于兼容旧代码，实际写入由各操作函数完成
+ * 保存数据到SQLite
+ * 
+ * server.js 的模式是：readData() → 内存修改 → safeWrite(data)
+ * 这个函数负责把内存中的完整状态同步到SQLite
+ * 
+ * 注意：日志(addLog)已经直接写入SQLite，这里不需要处理
  */
 function safeWrite(data) {
-  // SQLite已经自动保存，这个函数主要用于兼容旧代码
-  // 如果需要批量更新，可以在这里实现
-  return Promise.resolve();
+  try {
+    var database = dbModule.getDb();
+
+    database.transaction(function() {
+      // === 1. 同步培训记录 ===
+      // 获取DB中现有的非归档记录ID集合
+      var existingRows = database.prepare('SELECT id, archived FROM records').all();
+      var existingMap = {}; // id -> archived
+      existingRows.forEach(function(r) { existingMap[r.id] = r.archived; });
+      var memoryIds = {};
+
+      (data.records || []).forEach(function(record) {
+        var id = record.ID;
+        if (!id) return;
+        memoryIds[id] = true;
+        var dbRecord = dbModule.toDbRecord(record);
+
+        if (existingMap.hasOwnProperty(id)) {
+          // 更新现有记录
+          var fields = Object.entries(dbRecord).filter(function(kv) { return kv[0] !== 'id'; });
+          if (fields.length > 0) {
+            var setClause = fields.map(function(kv) { return kv[0] + ' = ?'; }).join(', ');
+            var values = fields.map(function(kv) { return kv[1] != null ? kv[1] : ''; });
+            database.prepare('UPDATE records SET ' + setClause + ' WHERE id = ?').run(values.concat([id]));
+          }
+        } else {
+          // 插入新记录
+          var cols = Object.keys(dbRecord);
+          var placeholders = cols.map(function() { return '?'; }).join(', ');
+          var insertValues = cols.map(function(c) { return dbRecord[c] != null ? dbRecord[c] : ''; });
+          database.prepare('INSERT INTO records (' + cols.join(', ') + ') VALUES (' + placeholders + ')').run(insertValues);
+        }
+
+        // 同步附件（先删后插）
+        database.prepare('DELETE FROM files WHERE record_id = ?').run(id);
+        if (record._files && record._files.length > 0) {
+          var fstmt = database.prepare('INSERT INTO files (record_id, name, saved, size, time) VALUES (?, ?, ?, ?, ?)');
+          record._files.forEach(function(f) { fstmt.run(id, f.name, f.saved, f.size || 0, f.time); });
+        }
+
+        // 同步提醒（先删后插）
+        database.prepare('DELETE FROM reminders WHERE record_id = ?').run(id);
+        if (record._reminders && record._reminders.length > 0) {
+          var rstmt = database.prepare('INSERT INTO reminders (record_id, type, date, time, hr) VALUES (?, ?, ?, ?, ?)');
+          record._reminders.forEach(function(r) { rstmt.run(id, r.type, r.date, r.time, r.hr || ''); });
+        }
+
+        // 同步评价（先删后插）
+        database.prepare('DELETE FROM evaluations WHERE record_id = ?').run(id);
+        if (record._eval) {
+          var e = record._eval;
+          database.prepare('INSERT INTO evaluations (record_id, score, tag, comment, evaluator, time) VALUES (?, ?, ?, ?, ?, ?)').run(
+            id, e.score || 0, e.tag || '', e.comment || '', e.evaluator || '', e.time || ''
+          );
+        }
+      });
+
+      // 删除内存中不存在的非归档记录（被deleteRecord操作删除的）
+      existingRows.forEach(function(r) {
+        if (!memoryIds[r.id] && !r.archived) {
+          database.prepare('DELETE FROM records WHERE id = ?').run(r.id);
+        }
+      });
+
+      // === 2. 同步用户 ===
+      database.prepare('DELETE FROM users').run();
+      if (data.users && data.users.length > 0) {
+        var ustmt = database.prepare('INSERT INTO users (username, password, name, role, dept) VALUES (?, ?, ?, ?, ?)');
+        data.users.forEach(function(u) {
+          ustmt.run(u.username, u.password, u.name, u.role || 'employee', u.dept || '');
+        });
+      }
+
+      // === 3. 同步部门 ===
+      database.prepare('DELETE FROM depts').run();
+      if (data.depts && data.depts.length > 0) {
+        var dstmt = database.prepare('INSERT OR IGNORE INTO depts (name) VALUES (?)');
+        data.depts.forEach(function(d) { dstmt.run(d); });
+      }
+
+      // === 4. 同步通知 ===
+      database.prepare('DELETE FROM notifications').run();
+      if (data.notifications) {
+        var nstmt = database.prepare('INSERT INTO notifications (key, value) VALUES (?, ?)');
+        if (Array.isArray(data.notifications)) {
+          nstmt.run('notifications', JSON.stringify(data.notifications));
+        } else {
+          Object.entries(data.notifications).forEach(function(kv) {
+            nstmt.run(kv[0], typeof kv[1] === 'object' ? JSON.stringify(kv[1]) : String(kv[1]));
+          });
+        }
+      }
+
+      // === 5. 同步设置 ===
+      database.prepare('DELETE FROM settings').run();
+      if (data.settings) {
+        var sstmt = database.prepare('INSERT INTO settings (key, value) VALUES (?, ?)');
+        Object.entries(data.settings).forEach(function(kv) {
+          sstmt.run(kv[0], typeof kv[1] === 'object' ? JSON.stringify(kv[1]) : String(kv[1]));
+        });
+      }
+
+      // === 6. 同步预算 ===
+      database.prepare('DELETE FROM budgets').run();
+      if (data.budgets && data.budgets.length > 0) {
+        var bstmt = database.prepare('INSERT INTO budgets (year, dept, amount) VALUES (?, ?, ?)');
+        data.budgets.forEach(function(b) { bstmt.run(b.year, b.dept, b.amount); });
+      }
+
+      // === 7. 同步nextId ===
+      var nextVal = typeof data.nextId === 'number' ? data.nextId : 10;
+      database.prepare('DELETE FROM id_counters').run();
+      database.prepare('INSERT INTO id_counters (name, value) VALUES (?, ?)').run('next', nextVal);
+
+      // 注意：日志(addLog)已直接写入SQLite，不需要在这里同步
+    })();
+
+  } catch (e) {
+    console.error('[db-adapter] safeWrite error:', e);
+  }
 }
 
 /**
- * 添加日志
+ * 添加日志（直接写入SQLite）
  */
 function addLog(operator, action, detail) {
-  const time = new Date().toLocaleString('zh-CN');
-  db.addLog({ time, operator, action, detail: detail || '' });
+  var time = new Date().toLocaleString('zh-CN');
+  dbModule.addLog({ time: time, operator: operator, action: action, detail: detail || '' });
 }
 
 /**
- * 获取数据库实例（用于高级操作）
+ * 获取数据库模块（用于高级操作）
  */
 function getDb() {
-  return db;
+  return dbModule;
 }
 
 /**
  * 关闭数据库连接
  */
 function close() {
-  db.closeDatabase();
+  dbModule.closeDatabase();
 }
 
 module.exports = {
-  readData,
-  safeWrite,
-  addLog,
-  getDb,
-  close,
-  
+  readData: readData,
+  safeWrite: safeWrite,
+  addLog: addLog,
+  getDb: getDb,
+  close: close,
+
   // 直接暴露db的方法，方便使用
-  getAllRecords: db.getAllRecords,
-  getRecord: db.getRecord,
-  insertRecord: db.insertRecord,
-  updateRecord: db.updateRecord,
-  deleteRecord: db.deleteRecord,
-  archiveRecord: db.archiveRecord,
-  
-  getAllUsers: db.getAllUsers,
-  getUser: db.getUser,
-  insertUser: db.insertUser,
-  updateUser: db.updateUser,
-  deleteUser: db.deleteUser,
-  
-  getAllLogs: db.getAllLogs,
-  
-  getNotifications: db.getNotifications,
-  setNotification: db.setNotification,
-  
-  getBudgets: db.getBudgets,
-  setBudget: db.setBudget,
-  
-  getDepts: db.getDepts,
-  addDept: db.addDept,
-  deleteDept: db.deleteDept,
-  
-  getSettings: db.getSettings,
-  setSetting: db.setSetting,
-  
-  getNextId: db.getNextId
+  getAllRecords: dbModule.getAllRecords,
+  getRecord: dbModule.getRecord,
+  insertRecord: dbModule.insertRecord,
+  updateRecord: dbModule.updateRecord,
+  deleteRecord: dbModule.deleteRecord,
+  archiveRecord: dbModule.archiveRecord,
+
+  getAllUsers: dbModule.getAllUsers,
+  getUser: dbModule.getUser,
+  insertUser: dbModule.insertUser,
+  updateUser: dbModule.updateUser,
+  deleteUser: dbModule.deleteUser,
+
+  getAllLogs: dbModule.getAllLogs,
+
+  getNotifications: dbModule.getNotifications,
+  setNotification: dbModule.setNotification,
+
+  getBudgets: dbModule.getBudgets,
+  setBudget: dbModule.setBudget,
+
+  getDepts: dbModule.getDepts,
+  addDept: dbModule.addDept,
+  deleteDept: dbModule.deleteDept,
+
+  getSettings: dbModule.getSettings,
+  setSetting: dbModule.setSetting,
+
+  getNextId: dbModule.getNextId
 };
