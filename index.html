@@ -196,6 +196,9 @@
       <div class="cd"><div class="cd-t">培训 ROI 分析</div><div class="cd-s">各部门/类型 的投入产出比（仅统计已通过的记录）</div><div id="roiContent"></div></div>
       <div class="cd"><div class="cd-t">部门费用分布</div><div class="cd-s">各部门培训投入占比</div><div class="bar-chart" id="deptChart"></div></div>
       <div class="cd"><div class="cd-t">培训类型分布</div><div class="cd-s">各类培训数量统计</div><div class="bar-chart" id="typeChart"></div></div>
+      <div class="cd"><div class="cd-t">🏆 部门排名</div><div class="cd-s">各部门培训综合表现（完成率/平均评分/人均费用）</div><div id="deptRankContent"></div></div>
+      <div class="cd"><div class="cd-t">📊 培训ROI热力图</div><div class="cd-s">部门×培训类型 的投入产出矩阵，颜色越深ROI越高</div><div id="roiHeatmapContent"></div></div>
+      <div class="cd"><div class="cd-t">📈 趋势预测</div><div class="cd-s">基于历史数据预测下季度培训情况</div><div id="trendPredictContent"></div></div>
       <div class="cd"><div class="cd-t">闭环概览</div><div class="cd-s">每笔培训从申请到评估的完成进度</div>
         <div class="tw"><table><thead><tr><th>姓名</th><th>部门</th><th>项目</th><th>费用</th><th>申请</th><th>总结</th><th>30天</th><th>90天</th><th>闭环</th></tr></thead><tbody id="dashTb"></tbody></table></div>
       </div>
@@ -239,6 +242,7 @@
         <input type="date" id="l-from" title="开始日期">
         <span style="font-size:12px;color:#999">至</span>
         <input type="date" id="l-to" title="结束日期">
+        <button class="bt" id="exportLogBtn">📥 导出日志</button>
       </div>
       <div class="tw"><table><thead><tr><th>时间</th><th>操作人</th><th>操作</th><th>详情</th></tr></thead><tbody id="logTb"></tbody></table></div>
       <div class="pg-ctrl" id="logPager">

@@ -100,6 +100,35 @@ function checkLoginRateLimit(ip) {
   return { ok: true };
 }
 
+// ─── 通用API限流（每 IP 每分钟60次） ───
+const API_RATE_LIMIT = {};  // ip -> { count: number, resetAt: timestamp }
+const API_RATE_MAX = 60;
+const API_RATE_WINDOW = 60 * 1000; // 1分钟
+
+function checkApiRateLimit(ip) {
+  var now = Date.now();
+  var entry = API_RATE_LIMIT[ip];
+  if (!entry || entry.resetAt < now) {
+    API_RATE_LIMIT[ip] = { count: 1, resetAt: now + API_RATE_WINDOW };
+    return { ok: true };
+  }
+  entry.count++;
+  if (entry.count > API_RATE_MAX) {
+    return { ok: false, msg: '请求过于频繁，请稍后再试' };
+  }
+  return { ok: true };
+}
+
+// ─── 错误日志 ───
+const fs_error = require('fs');
+const ERROR_LOG_FILE = path.join(__dirname, 'error.log');
+
+function logError(type, message, stack) {
+  var time = new Date().toISOString();
+  var line = '[' + time + '] ' + type + ': ' + message + (stack ? '\n' + stack : '') + '\n';
+  fs_error.appendFile(ERROR_LOG_FILE, line, function() {});
+}
+
 // ─── 登录失败锁定 ───
 const LOGIN_LOCK = {};           // username -> { attempts: number, lockedUntil: timestamp }
 const MAX_LOGIN_ATTEMPTS = 5;    // 最多尝试次数
@@ -281,6 +310,17 @@ setInterval(function() {
 var server = http.createServer(function(req, res) {
   var parsed = url.parse(req.url, true);
   var pathname = parsed.pathname;
+
+  // ─── API限流检查 ───
+  var clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '';
+  if (pathname.startsWith('/api')) {
+    var rateCheck = checkApiRateLimit(clientIp);
+    if (!rateCheck.ok) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: false, msg: rateCheck.msg }));
+      return;
+    }
+  }
 
   // ─── CORS：检查 Origin ───
   var origin = req.headers['origin'] || '';
@@ -488,8 +528,24 @@ var server = http.createServer(function(req, res) {
     return;
   }
 
+  // ─── 错误报告接口（无需认证） ───
+  if (pathname === '/api/error-report' && req.method === 'POST') {
+    var errBody = '';
+    req.on('data', function(c) { errBody += c; });
+    req.on('end', function() {
+      try {
+        var errData = JSON.parse(errBody);
+        logError(errData.type || 'client_error', errData.message || '', errData.stack || '');
+        sendJson(res, { ok: true });
+      } catch(e) {
+        sendJson(res, { ok: false });
+      }
+    });
+    return;
+  }
+
   // ─── API 路由 ───
-  if (pathname === '/api') {
+  if (pathname === '/api' || pathname === '/api/v1') {
     var action = parsed.query.action || '';
 
     // ════════ 无需认证的接口 ════════

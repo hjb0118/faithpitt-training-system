@@ -1869,6 +1869,246 @@ function viewSummary(id) {
       }
     }
     document.getElementById('deptRateTb').innerHTML = dRateH;
+
+    // ── 部门排名 ──
+    renderDeptRanking(dashData, deptStats);
+
+    // ── ROI热力图 ──
+    renderROIHeatmap(dashData);
+
+    // ── 趋势预测 ──
+    renderTrendPredict(ALL_DATA);
+  }
+
+  // ─── 部门排名 ───
+  function renderDeptRanking(data, deptStats) {
+    var el = document.getElementById('deptRankContent');
+    if (!el) return;
+
+    var depts = Object.keys(deptStats);
+    if (depts.length === 0) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:20px;text-align:center">暂无部门数据</div>';
+      return;
+    }
+
+    // 计算每个部门的综合指标
+    var rankings = depts.map(function(dept) {
+      var stats = deptStats[dept];
+      var deptRecords = data.filter(function(r) { return r['部门'] === dept; });
+      var totalCost = deptRecords.reduce(function(sum, r) { return sum + (parseFloat(r['费用']) || 0); }, 0);
+      var employees = {};
+      deptRecords.forEach(function(r) { if (r['员工']) employees[r['员工']] = true; });
+      var empCount = Object.keys(employees).length || 1;
+
+      // 计算平均评分
+      var scores = deptRecords.filter(function(r) { return r['评估分数']; }).map(function(r) { return parseFloat(r['评估分数']) || 0; });
+      var avgScore = scores.length > 0 ? (scores.reduce(function(a, b) { return a + b; }, 0) / scores.length).toFixed(1) : '-';
+
+      var rate = stats.total > 0 ? Math.round(stats.done / stats.total * 100) : 0;
+
+      return {
+        dept: dept,
+        rate: rate,
+        avgScore: avgScore,
+        costPerPerson: Math.round(totalCost / empCount),
+        total: stats.total,
+        done: stats.done
+      };
+    });
+
+    // 按完成率排序
+    rankings.sort(function(a, b) { return b.rate - a.rate; });
+
+    var h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px">';
+    rankings.forEach(function(r, idx) {
+      var medal = idx === 0 ? '🥇' : idx === 1 ? '🥈' : idx === 2 ? '🥉' : '  ' + (idx + 1) + '.';
+      var rateColor = r.rate >= 80 ? 'var(--success)' : r.rate >= 50 ? 'var(--warning)' : 'var(--danger)';
+      h += '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-md);padding:14px 16px">';
+      h += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+      h += '<span style="font-weight:700;font-size:15px">' + medal + ' ' + esc(r.dept) + '</span>';
+      h += '<span style="font-size:20px;font-weight:800;color:' + rateColor + '">' + r.rate + '%</span>';
+      h += '</div>';
+      h += '<div style="display:flex;gap:16px;font-size:12px;color:var(--text-secondary)">';
+      h += '<span>完成 <b>' + r.done + '</b>/' + r.total + '</span>';
+      h += '<span>评分 <b>' + r.avgScore + '</b></span>';
+      h += '<span>人均 <b>¥' + r.costPerPerson.toLocaleString() + '</b></span>';
+      h += '</div>';
+      h += '</div>';
+    });
+    h += '</div>';
+    el.innerHTML = h;
+  }
+
+  // ─── ROI热力图 ───
+  function renderROIHeatmap(data) {
+    var el = document.getElementById('roiHeatmapContent');
+    if (!el) return;
+
+    // 统计部门×类型的数据
+    var matrix = {};
+    var types = {};
+    var depts = {};
+
+    data.forEach(function(r) {
+      var dept = r['部门'] || '未知';
+      var type = r['培训类型'] || '其他';
+      var cost = parseFloat(r['费用']) || 0;
+      var isDone = ['已完成', '30天已回访'].indexOf(r['状态']) >= 0;
+
+      if (!matrix[dept]) matrix[dept] = {};
+      if (!matrix[dept][type]) matrix[dept][type] = { cost: 0, count: 0, done: 0 };
+
+      matrix[dept][type].cost += cost;
+      matrix[dept][type].count++;
+      if (isDone) matrix[dept][type].done++;
+
+      types[type] = true;
+      depts[dept] = true;
+    });
+
+    var typeList = Object.keys(types).sort();
+    var deptList = Object.keys(depts).sort();
+
+    if (typeList.length === 0 || deptList.length === 0) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:20px;text-align:center">暂无数据</div>';
+      return;
+    }
+
+    // 计算ROI（完成率/费用占比）
+    var maxROI = 0;
+    deptList.forEach(function(dept) {
+      typeList.forEach(function(type) {
+        var cell = (matrix[dept] || {})[type];
+        if (cell && cell.count > 0) {
+          var roi = cell.done / cell.count;
+          if (roi > maxROI) maxROI = roi;
+        }
+      });
+    });
+
+    var h = '<div style="overflow-x:auto">';
+    h += '<table style="width:100%;font-size:12px;border-collapse:collapse">';
+    h += '<tr><th style="padding:8px;text-align:left;border-bottom:2px solid var(--border);min-width:80px">部门</th>';
+    typeList.forEach(function(type) {
+      h += '<th style="padding:8px;text-align:center;border-bottom:2px solid var(--border);min-width:60px">' + esc(type) + '</th>';
+    });
+    h += '</tr>';
+
+    deptList.forEach(function(dept) {
+      h += '<tr><td style="padding:8px;border-bottom:1px solid var(--border);font-weight:600">' + esc(dept) + '</td>';
+      typeList.forEach(function(type) {
+        var cell = (matrix[dept] || {})[type];
+        if (!cell || cell.count === 0) {
+          h += '<td style="padding:8px;text-align:center;border-bottom:1px solid var(--border);color:var(--text-muted)">-</td>';
+        } else {
+          var roi = cell.done / cell.count;
+          var intensity = maxROI > 0 ? roi / maxROI : 0;
+          var bg = intensity > 0.7 ? 'var(--success-bg)' : intensity > 0.3 ? 'var(--warning-bg)' : 'var(--danger-bg)';
+          var color = intensity > 0.7 ? 'var(--success-dark)' : intensity > 0.3 ? 'var(--warning-dark)' : 'var(--danger-dark)';
+          h += '<td style="padding:8px;text-align:center;border-bottom:1px solid var(--border);background:' + bg + ';color:' + color + ';font-weight:600;cursor:pointer" title="' + esc(dept) + ' - ' + esc(type) + ':\n完成率: ' + Math.round(roi * 100) + '%\n费用: ¥' + cell.cost.toLocaleString() + '\n数量: ' + cell.count + '">';
+          h += Math.round(roi * 100) + '%';
+          h += '</td>';
+        }
+      });
+      h += '</tr>';
+    });
+
+    h += '</table></div>';
+    h += '<div style="margin-top:10px;font-size:11px;color:var(--text-muted)">颜色越深 = 完成率越高（点击单元格查看详情）</div>';
+    el.innerHTML = h;
+  }
+
+  // ─── 趋势预测（简单线性回归） ───
+  function renderTrendPredict(allData) {
+    var el = document.getElementById('trendPredictContent');
+    if (!el) return;
+
+    // 按月统计近12个月的数据
+    var now = new Date();
+    var monthlyData = [];
+
+    for (var i = 11; i >= 0; i--) {
+      var month = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      var monthStr = month.toISOString().slice(0, 7);
+      var monthRecords = allData.filter(function(r) { return (r['培训日期'] || '').startsWith(monthStr); });
+      var monthCost = monthRecords.reduce(function(sum, r) { return sum + (parseFloat(r['费用']) || 0); }, 0);
+      monthlyData.push({
+        month: monthStr,
+        count: monthRecords.length,
+        cost: monthCost
+      });
+    }
+
+    // 简单线性回归
+    function linearRegression(data) {
+      var n = data.length;
+      if (n < 3) return null;
+
+      var sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+      for (var i = 0; i < n; i++) {
+        sumX += i;
+        sumY += data[i];
+        sumXY += i * data[i];
+        sumX2 += i * i;
+      }
+
+      var slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+      var intercept = (sumY - slope * sumX) / n;
+
+      return { slope: slope, intercept: intercept };
+    }
+
+    var countData = monthlyData.map(function(m) { return m.count; });
+    var costData = monthlyData.map(function(m) { return m.cost; });
+
+    var countReg = linearRegression(countData);
+    var costReg = linearRegression(costData);
+
+    if (!countReg || !costReg) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:20px;text-align:center">数据不足，需要至少3个月的数据</div>';
+      return;
+    }
+
+    // 预测下季度（3个月）
+    var nextQuarterCount = Math.max(0, Math.round(countReg.slope * 15 + countReg.intercept));
+    var nextQuarterCost = Math.max(0, Math.round(costReg.slope * 15 + costReg.intercept));
+
+    // 计算趋势方向
+    var countTrend = countReg.slope > 0.1 ? '📈 上升' : countReg.slope < -0.1 ? '📉 下降' : '➡️ 平稳';
+    var costTrend = costReg.slope > 100 ? '📈 上升' : costReg.slope < -100 ? '📉 下降' : '➡️ 平稳';
+
+    var h = '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px">';
+    h += '<div style="background:var(--primary-bg);border:1px solid var(--primary-light);border-radius:var(--radius-md);padding:16px;text-align:center">';
+    h += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">下季度预测培训次数</div>';
+    h += '<div style="font-size:28px;font-weight:800;color:var(--primary-deeper)">' + nextQuarterCount + ' 次</div>';
+    h += '<div style="font-size:12px;margin-top:4px">' + countTrend + '</div>';
+    h += '</div>';
+    h += '<div style="background:var(--info-bg);border:1px solid #B8D4F0;border-radius:var(--radius-md);padding:16px;text-align:center">';
+    h += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">下季度预测培训费用</div>';
+    h += '<div style="font-size:28px;font-weight:800;color:var(--info)">¥' + nextQuarterCost.toLocaleString() + '</div>';
+    h += '<div style="font-size:12px;margin-top:4px">' + costTrend + '</div>';
+    h += '</div>';
+    h += '</div>';
+
+    // 最近趋势图表（简化版柱状图）
+    h += '<div style="margin-top:16px">';
+    h += '<div style="font-size:12px;color:var(--text-secondary);margin-bottom:8px">近12个月培训次数趋势</div>';
+    h += '<div style="display:flex;align-items:flex-end;gap:4px;height:60px">';
+    var maxCount = Math.max.apply(null, countData) || 1;
+    monthlyData.forEach(function(m) {
+      var height = Math.max(4, (m.count / maxCount) * 50);
+      var isCurrent = m.month === now.toISOString().slice(0, 7);
+      h += '<div style="flex:1;background:' + (isCurrent ? 'var(--primary)' : 'var(--primary-light)') + ';height:' + height + 'px;border-radius:2px 2px 0 0" title="' + m.month + ': ' + m.count + '次"></div>';
+    });
+    h += '</div>';
+    h += '<div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted);margin-top:4px">';
+    h += '<span>' + monthlyData[0].month + '</span>';
+    h += '<span>' + monthlyData[11].month + '</span>';
+    h += '</div>';
+    h += '</div>';
+
+    h += '<div style="margin-top:12px;font-size:11px;color:var(--text-muted)">基于近12个月数据的线性回归预测，仅供参考</div>';
+    el.innerHTML = h;
   }
 
     function renderAll() {
@@ -3467,6 +3707,44 @@ function viewSummary(id) {
   document.getElementById('logPrev').addEventListener('click', function() { if (LOG_PAGE > 1) { LOG_PAGE--; renderLogPage(); } });
   document.getElementById('logNext').addEventListener('click', function() { var totalPages = Math.max(1, Math.ceil(ALL_LOG_FILTERED.length / LOG_SIZE)); if (LOG_PAGE < totalPages) { LOG_PAGE++; renderLogPage(); } });
 
+  // ─── 导出日志 ───
+  document.getElementById('exportLogBtn').addEventListener('click', function() {
+    var logs = ALL_LOG_FILTERED.length > 0 ? ALL_LOG_FILTERED : ALL_LOGS;
+    if (logs.length === 0) {
+      toast('暂无日志可导出');
+      return;
+    }
+
+    if (typeof XLSX !== 'undefined') {
+      var header = ['时间', '操作人', '操作', '详情'];
+      var rows = logs.map(function(l) { return [l.time, l.operator, l.action, l.detail]; });
+      var wsData = [header].concat(rows);
+      var ws = XLSX.utils.aoa_to_sheet(wsData);
+      ws['!cols'] = [{wch:20}, {wch:12}, {wch:15}, {wch:50}];
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, '操作日志');
+      XLSX.writeFile(wb, '操作日志_' + new Date().toISOString().slice(0,10) + '.xlsx');
+      toast('已导出 ' + logs.length + ' 条日志（Excel）');
+    } else {
+      // CSV降级
+      var csv = '\uFEFF时间,操作人,操作,详情\n';
+      logs.forEach(function(l) {
+        csv += '"' + (l.time || '').replace(/"/g, '""') + '",';
+        csv += '"' + (l.operator || '').replace(/"/g, '""') + '",';
+        csv += '"' + (l.action || '').replace(/"/g, '""') + '",';
+        csv += '"' + (l.detail || '').replace(/"/g, '""') + '"\n';
+      });
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = '操作日志_' + new Date().toISOString().slice(0,10) + '.csv';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('已导出 ' + logs.length + ' 条日志（CSV）');
+    }
+  });
+
   // ─── 通知设置 ───
   function loadWebhookConfig() {
     apiGet('getWebhook').then(function(res) {
@@ -3591,10 +3869,18 @@ function viewSummary(id) {
             var newP = document.getElementById('rp-pwd').value;
             if (!newP || newP.length < 6) { toast('密码至少6位'); return; }
             closeM();
-            apiPost('resetPwd', { username: targetUser2, password: newP, _operator: ME.name }).then(function(r) {
-              if (r.ok) toast('密码已重置 ✓');
-              else toast('重置失败：' + (r.msg || ''));
-            });
+            // 二次确认
+            openConfirmModal(
+              '确认重置密码',
+              '确定要重置用户「' + targetUser2 + '」的密码吗？',
+              function() {
+                apiPost('resetPwd', { username: targetUser2, password: newP, _operator: ME.name }).then(function(r) {
+                  if (r.ok) toast('密码已重置 ✓');
+                  else toast('重置失败：' + (r.msg || ''));
+                });
+              },
+              false
+            );
           });
         }
       });
@@ -4699,5 +4985,40 @@ function viewSummary(id) {
     addFieldValidation('a-scene', function(v) { return v.trim().length >= 5; });
     addFieldValidation('a-out', function(v) { return v.trim().length >= 10; });
   }, 1000);
+
+  // ─── 前端错误监控 ───
+  window.onerror = function(msg, url, line, col, error) {
+    var errorInfo = {
+      type: 'js_error',
+      message: msg,
+      url: url,
+      line: line,
+      col: col,
+      stack: error ? error.stack : '',
+      userAgent: navigator.userAgent,
+      time: new Date().toISOString()
+    };
+    // 发送到服务器
+    fetch('/api/error-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(errorInfo)
+    }).catch(function() {});
+    return false;
+  };
+
+  window.addEventListener('unhandledrejection', function(event) {
+    var errorInfo = {
+      type: 'promise_rejection',
+      message: event.reason ? event.reason.message || String(event.reason) : 'Unknown',
+      stack: event.reason && event.reason.stack ? event.reason.stack : '',
+      time: new Date().toISOString()
+    };
+    fetch('/api/error-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(errorInfo)
+    }).catch(function() {});
+  });
 
 })();
