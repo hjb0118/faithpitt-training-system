@@ -5,6 +5,11 @@ node_modules/
 data.json
 tokens.json
 
+# SQLite数据库（运行时数据，不提交）
+*.db
+*.db-shm
+*.db-wal
+
 # 日志
 *.log
 server.log
