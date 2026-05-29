@@ -3135,22 +3135,34 @@ function viewSummary(id) {
     bindTableBtns(el);
   }
 
-  function renderProfile() {
-    hideSkeleton('profile');
+  // 初始化下拉框（只在页面加载时调用一次）
+  function initProfileDropdown() {
     var sel = document.getElementById('pf-emp');
+    if (!sel || sel._inited) return;
+    sel._inited = true;
+    var isHR = ME.role === 'hr';
     var nameSet = {};
-    ALL_DATA.forEach(function(r) { if (r['员工']) nameSet[r['员工']] = true; });
-    ALL_USERS.forEach(function(u) { nameSet[u.name] = true; });
+    if (isHR) {
+      ALL_DATA.forEach(function(r) { if (r['员工']) nameSet[r['员工']] = true; });
+      ALL_USERS.forEach(function(u) { nameSet[u.name] = true; });
+    } else {
+      nameSet[ME.name] = true;
+    }
     var names = Object.keys(nameSet).sort();
-    var cur = sel.value;
     var selH = '<option value="">选择员工</option>';
-    for (var si = 0; si < names.length; si++) selH += '<option value="' + esc(names[si]) + '" ' + (names[si] === cur ? 'selected' : '') + '>' + esc(names[si]) + '</option>';
+    for (var si = 0; si < names.length; si++) selH += '<option value="' + esc(names[si]) + '">' + esc(names[si]) + '</option>';
     sel.innerHTML = selH;
-    if (cur) sel.value = cur; // 恢复选中状态
+    // 员工自动选中自己
+    if (!isHR) { sel.value = ME.name; renderProfileContent(); }
+  }
 
+  // 渲染档案内容（根据下拉框当前选中值）
+  function renderProfileContent() {
+    var sel = document.getElementById('pf-emp');
     var content = document.getElementById('profileContent');
     var exportBtn = document.getElementById('hrExportReportBtn');
-    var selectedEmp = sel.value; // 用sel.value而不是cur
+    var selectedEmp = sel.value;
+
     if (!selectedEmp) {
       content.innerHTML = '<div class="em"><p>请选择一位员工查看成长档案</p></div>';
       if (exportBtn) exportBtn.style.display = 'none';
@@ -3186,9 +3198,10 @@ function viewSummary(id) {
     h += '<div class="st"><div class="st-l">已完成</div><div class="st-v g">' + (statusMap['已完成'] || 0) + '</div></div>';
     h += '</div>';
 
+    var sc2 = { '待审批':'bdo','已通过':'bdg','已驳回':'bdr','学习中':'bdb','总结已提交':'bdb','待评审':'bdp','30天已回访':'bdp','已完成':'bdg' };
+
     // Status breakdown
     h += '<div style="font-size:13px;color:#666;margin-bottom:8px">状态分布：</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">';
-    var sc2 = { '待审批':'bdo','已通过':'bdg','已驳回':'bdr','学习中':'bdb','总结已提交':'bdb','待评审':'bdp','30天已回访':'bdp','已完成':'bdg' };
     for (var st in statusMap) {
       h += '<span class="bd ' + (sc2[st] || 'bdy') + '">' + st + ' ' + statusMap[st] + '</span>';
     }
@@ -3227,7 +3240,31 @@ function viewSummary(id) {
     content.innerHTML = h;
   }
 
-  document.getElementById('pf-emp') && document.getElementById('pf-emp').addEventListener('change', renderProfile);
+  // 兼容旧调用
+  function renderProfile() {
+    hideSkeleton('profile');
+    initProfileDropdown();
+    renderProfileContent();
+    // 确保change事件绑定（防止因DOM操作导致事件丢失）
+    var sel = document.getElementById('pf-emp');
+    if (sel && !sel._changeBound) {
+      sel._changeBound = true;
+      sel.addEventListener('change', function() {
+        renderProfileContent();
+      });
+    }
+  }
+
+  // 兼容：页面加载时也绑定一次
+  (function() {
+    var sel = document.getElementById('pf-emp');
+    if (sel && !sel._changeBound) {
+      sel._changeBound = true;
+      sel.addEventListener('change', function() {
+        renderProfileContent();
+      });
+    }
+  })();
 
   // ─── HR导出个人培训报告 ───
   function hrExportReport() {
