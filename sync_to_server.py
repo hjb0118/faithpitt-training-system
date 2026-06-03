@@ -21,7 +21,7 @@ PM2_APP = 'training-system'
 LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # 需要同步的文件/目录
-SYNC_FILES = ['server.js', 'index.html', 'data.json', 'tokens.json', 'wechat_notify.js']
+SYNC_FILES = ['server.js', 'index.html', 'tokens.json', 'wechat_notify.js', 'db.js', 'db-adapter.js', 'package.json']
 SYNC_DIRS = ['css', 'js', 'uploads']
 
 # 排除的文件（不上传）

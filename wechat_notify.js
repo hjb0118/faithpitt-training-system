@@ -91,35 +91,27 @@ function buildNotification(type, data) {
     return templates[type] || '### \u51E1\u78A7\u8BD7\u57F9\u8BAD\u901A\u77E5\n\n' + JSON.stringify(data);
 }
 
-// ─── 数据文件路径（使用绝对路径，避免工作目录问题） ───
-const DATA_PATH = require('path').join(__dirname, 'data.json');
-
-// ─── 获取Webhook配置 ───
+// ─── 获取Webhook配置（从SQLite读取） ───
 function getWebhookConfig() {
     try {
-        const data = JSON.parse(fs.readFileSync(DATA_PATH, 'utf-8'));
-        return data.settings && data.settings.webhook ? data.settings.webhook : null;
-    } catch { return null; }
+        const dbAdapter = require('./db-adapter');
+        const settings = dbAdapter.getSettings();
+        return settings.webhook || null;
+    } catch (e) {
+        console.error('[企业微信] 读取配置失败:', e);
+        return null;
+    }
 }
 
-// ─── 写锁（防止与 server.js 的 safeWrite 并发写入冲突） ───
-let wechatWriteLock = Promise.resolve();
-
-// ─── 保存Webhook配置 ───
+// ─── 保存Webhook配置（写入SQLite） ───
 function saveWebhookConfig(webhook, enabled) {
-    wechatWriteLock = wechatWriteLock.then(() => {
-        return new Promise((resolve) => {
-            const tmp = DATA_PATH + '.tmp';
-            const data = JSON.parse(fs.readFileSync(DATA_PATH, 'utf-8'));
-            if (!data.settings) data.settings = {};
-            data.settings.webhook = { url: webhook, enabled: enabled };
-            fs.writeFile(tmp, JSON.stringify(data, null, 2), (err) => {
-                if (err) { resolve(); return; }
-                fs.rename(tmp, DATA_PATH, () => resolve());
-            });
-        });
-    });
-    return wechatWriteLock;
+    try {
+        const dbAdapter = require('./db-adapter');
+        dbAdapter.setSetting('webhook', { url: webhook, enabled: enabled });
+        console.log('[企业微信] 配置已保存到SQLite');
+    } catch (e) {
+        console.error('[企业微信] 保存配置失败:', e);
+    }
 }
 
 // ─── 触发通知（供其他地方调用） ───

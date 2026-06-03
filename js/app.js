@@ -19,6 +19,47 @@
 
   function esc(s) { return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
+  // ─── 用户管理页面按钮事件（提前绑定，防止后续代码报错导致无法点击） ───
+  (function bindUserMgmtButtons() {
+    var addUserBtn = document.getElementById('addUserBtn');
+    var importUsersBtn = document.getElementById('importUsersBtn');
+    var downloadTplBtn = document.getElementById('downloadTplBtn');
+    if (addUserBtn) {
+      addUserBtn.addEventListener('click', function() {
+        var h = '<div class="fgd">';
+        h += '<div class="fg"><label>用户名 *</label><input id="nu-user"></div>';
+        h += '<div class="fg"><label>密码 *</label><input id="nu-pwd" type="password"></div>';
+        h += '<div class="fg"><label>姓名 *</label><input id="nu-name"></div>';
+        h += '<div class="fg"><label>部门</label><input id="nu-dept"></div>';
+        h += '<div class="fg fl"><label>角色</label><select id="nu-role"><option value="employee">员工</option><option value="hr">HR管理员</option></select></div>';
+        h += '<div class="fa"><button class="bt" id="nuCancel">取消</button><button class="bt btp" id="nuSave">创建</button></div></div>';
+        openM('新增用户', h);
+        document.getElementById('nuCancel').addEventListener('click', closeM);
+        document.getElementById('nuSave').addEventListener('click', function() {
+          var u = document.getElementById('nu-user').value.trim();
+          var p = document.getElementById('nu-pwd').value;
+          var n = document.getElementById('nu-name').value.trim();
+          if (!u || !p || !n) { toast('请填写必填项'); return; }
+          apiPost('addUser', { username: u, password: p, name: n, role: document.getElementById('nu-role').value, dept: document.getElementById('nu-dept').value.trim(), _operator: ME.name }).then(function(r) {
+            if (r.ok) { toast('用户已创建'); closeM(); refreshData().then(function() { renderUsers(); }); }
+            else toast(r.msg || '创建失败');
+          });
+        });
+      });
+    }
+    if (importUsersBtn) {
+      importUsersBtn.addEventListener('click', function() { openImportUsersModal(); });
+    }
+    if (downloadTplBtn) {
+      downloadTplBtn.addEventListener('click', function(e) {
+        e.preventDefault();
+        downloadUserTemplate();
+      });
+    }
+    // showAddUser 兼容：供空状态页面 onclick 调用
+    window.showAddUser = function() { if (addUserBtn) addUserBtn.click(); };
+  })();
+
   // ─── 计算培训记录的逾期状态 ───
   function getOverdueInfo(r) {
     var now = new Date();
@@ -3926,33 +3967,7 @@ function viewSummary(id) {
     }
   }
 
-  document.getElementById('importUsersBtn').addEventListener('click', openImportUsersModal);
-  document.getElementById('downloadTplBtn').addEventListener('click', function(e) {
-    e.preventDefault();
-    downloadUserTemplate();
-  });
-
-  document.getElementById('addUserBtn').addEventListener('click', function() {
-    var h = '<div class="fgd">';
-    h += '<div class="fg"><label>用户名 *</label><input id="nu-user"></div>';
-    h += '<div class="fg"><label>密码 *</label><input id="nu-pwd" type="password"></div>';
-    h += '<div class="fg"><label>姓名 *</label><input id="nu-name"></div>';
-    h += '<div class="fg"><label>部门</label><input id="nu-dept"></div>';
-    h += '<div class="fg fl"><label>角色</label><select id="nu-role"><option value="employee">员工</option><option value="hr">HR管理员</option></select></div>';
-    h += '<div class="fa"><button class="bt" id="nuCancel">取消</button><button class="bt btp" id="nuSave">创建</button></div></div>';
-    openM('新增用户', h);
-    document.getElementById('nuCancel').addEventListener('click', closeM);
-    document.getElementById('nuSave').addEventListener('click', function() {
-      var u = document.getElementById('nu-user').value.trim();
-      var p = document.getElementById('nu-pwd').value;
-      var n = document.getElementById('nu-name').value.trim();
-      if (!u || !p || !n) { toast('请填写必填项'); return; }
-      apiPost('addUser', { username: u, password: p, name: n, role: document.getElementById('nu-role').value, dept: document.getElementById('nu-dept').value.trim(), _operator: ME.name }).then(function(r) {
-        if (r.ok) { toast('用户已创建'); closeM(); refreshData().then(function() { renderUsers(); }); }
-        else toast(r.msg || '创建失败');
-      });
-    });
-  });
+  // 用户管理按钮事件已提前绑定到文件顶部（bindUserMgmtButtons）
 
   // ─── 申请表草稿自动保存 ───
   var DRAFT_KEY = 'tvt_apply_draft_';
@@ -4989,7 +5004,7 @@ function viewSummary(id) {
     // 初始检查
     setTimeout(updateFab, 500);
     // 页面切换时检查
-    var origGo = typeof go === 'function' ? go : null;
+    // FAB按钮在页面切换时已通过 go() 函数自动处理显示/隐藏
   }
 
   // ─── 表单实时校验 ───
