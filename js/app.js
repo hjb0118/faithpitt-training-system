@@ -19,11 +19,13 @@
 
   function esc(s) { return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
-  // ─── 用户管理页面按钮事件（提前绑定，防止后续代码报错导致无法点击） ───
-  (function bindUserMgmtButtons() {
+  // ─── 用户管理页面按钮事件（提取为可重复绑定的函数，骨架屏恢复DOM后需重新调用） ───
+  function bindUsersPageEvents() {
     var addUserBtn = document.getElementById('addUserBtn');
     var importUsersBtn = document.getElementById('importUsersBtn');
     var downloadTplBtn = document.getElementById('downloadTplBtn');
+    var deptAddBtn = document.getElementById('deptAddBtn');
+    var deptInput = document.getElementById('dept-input');
     if (addUserBtn) {
       addUserBtn.addEventListener('click', function() {
         var h = '<div class="fgd">';
@@ -56,9 +58,29 @@
         downloadUserTemplate();
       });
     }
+    if (deptAddBtn) {
+      deptAddBtn.addEventListener('click', function() {
+        var name = document.getElementById('dept-input').value.trim();
+        if (!name) { toast('请输入部门名称'); return; }
+        if (ALL_DEPTS.indexOf(name) >= 0) { toast('该部门已存在'); return; }
+        apiPost('addDept', { name: name }).then(function(r) {
+          if (r.ok) {
+            toast('部门已添加');
+            document.getElementById('dept-input').value = '';
+            refreshData().then(renderDept);
+          } else toast('添加失败：' + (r.msg || ''));
+        });
+      });
+    }
+    if (deptInput) {
+      deptInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter' && deptAddBtn) deptAddBtn.click();
+      });
+    }
     // showAddUser 兼容：供空状态页面 onclick 调用
     window.showAddUser = function() { if (addUserBtn) addUserBtn.click(); };
-  })();
+  }
+  bindUsersPageEvents();
 
   // ─── 计算培训记录的逾期状态 ───
   function getOverdueInfo(r) {
@@ -237,6 +259,9 @@
     // 恢复原始内容
     container.innerHTML = container._originalContent;
     delete container._originalContent;
+
+    // 骨架屏会替换整个DOM，事件绑定丢失，需重新绑定
+    if (page === 'users') bindUsersPageEvents();
   }
 
   // ─── 附件预览 ───
@@ -538,7 +563,7 @@
     }
     
     // 显示骨架屏（仅对需要加载数据的页面）
-    var skeletonPages = ['dash', 'all', 'log', 'my', 'todos', 'profile', 'users'];
+    var skeletonPages = ['dash', 'all', 'log', 'my', 'todos', 'profile'];
     if (skeletonPages.indexOf(page) > -1) {
       showSkeleton(page);
     }
@@ -4742,21 +4767,7 @@ function viewSummary(id) {
     }
   }
 
-  document.getElementById('deptAddBtn').addEventListener('click', function() {
-    var name = document.getElementById('dept-input').value.trim();
-    if (!name) { toast('请输入部门名称'); return; }
-    if (ALL_DEPTS.indexOf(name) >= 0) { toast('该部门已存在'); return; }
-    apiPost('addDept', { name: name }).then(function(r) {
-      if (r.ok) {
-        toast('部门已添加');
-        document.getElementById('dept-input').value = '';
-        refreshData().then(renderDept);
-      } else toast('添加失败：' + (r.msg || ''));
-    });
-  });
-  document.getElementById('dept-input').addEventListener('keydown', function(e) {
-    if (e.key === 'Enter') document.getElementById('deptAddBtn').click();
-  });
+  // deptAddBtn 和 dept-input 事件已统一在 bindUsersPageEvents() 中绑定
 
   // 把部门datalist插入申请表单（动态，不破坏现有）
   (function() {
