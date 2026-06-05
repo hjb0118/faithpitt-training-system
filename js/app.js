@@ -262,6 +262,7 @@
 
     // 骨架屏会替换整个DOM，事件绑定丢失，需重新绑定
     if (page === 'users') bindUsersPageEvents();
+    if (page === 'all') bindAllPageEvents();
   }
 
   // ─── 附件预览 ───
@@ -569,16 +570,6 @@
     }
     
     if (page === 'my') {
-      // 同步Tab样式
-      var pendingTab = document.getElementById('myTabPending');
-      var doneTab = document.getElementById('myTabDone');
-      if (MY_TAB === 'pending') {
-        pendingTab.style.background = 'var(--primary-dark)'; pendingTab.style.color = '#0D1A08';
-        doneTab.style.background = '#fff'; doneTab.style.color = '#666';
-      } else {
-        doneTab.style.background = 'var(--primary-dark)'; doneTab.style.color = '#0D1A08';
-        pendingTab.style.background = '#fff'; pendingTab.style.color = '#666';
-      }
       renderMy();
       setTimeout(injectCertButtons, 50);
     }
@@ -653,6 +644,18 @@
 
   function renderMy() {
     hideSkeleton('my');
+    // Tab样式（必须在hideSkeleton之后，否则DOM被骨架屏替换找不到元素）
+    var pendingTab = document.getElementById('myTabPending');
+    var doneTab = document.getElementById('myTabDone');
+    if (pendingTab && doneTab) {
+      if (MY_TAB === 'pending') {
+        pendingTab.style.background = 'var(--primary-dark)'; pendingTab.style.color = '#0D1A08';
+        doneTab.style.background = '#fff'; doneTab.style.color = '#666';
+      } else {
+        doneTab.style.background = 'var(--primary-dark)'; doneTab.style.color = '#0D1A08';
+        pendingTab.style.background = '#fff'; pendingTab.style.color = '#666';
+      }
+    }
     var data = ALL_DATA;
     var tb = document.getElementById('myTb');
 
@@ -2685,7 +2688,54 @@ function viewSummary(id) {
     );
   }
 
-  document.getElementById('addBtn').addEventListener('click', function() { openM('新增培训记录', buildForm(null, true)); });
+  // ─── 所有记录页面按钮事件（提取为可重复绑定的函数，骨架屏恢复DOM后需重新调用） ───
+  function bindAllPageEvents() {
+    var addBtn = document.getElementById('addBtn');
+    var exportBtn = document.getElementById('exportBtn');
+    var importRecordsBtn = document.getElementById('importRecordsBtn');
+    if (addBtn) addBtn.addEventListener('click', function() { openM('新增培训记录', buildForm(null, true)); });
+    if (exportBtn) exportBtn.addEventListener('click', function() {
+      // 根据当前筛选条件导出，而不是全量
+      var data = ALL_DATA.slice();
+      var q = document.getElementById('f-q').value.toLowerCase();
+      var df = document.getElementById('f-dept').value;
+      var sf = document.getElementById('f-st').value;
+      var from = document.getElementById('f-from').value;
+      var to = document.getElementById('f-to').value;
+      var arch = document.getElementById('f-archived').checked;
+      if (q) data = data.filter(function(r) { return (r['员工']+r['培训项目']+r.ID).toLowerCase().indexOf(q) >= 0; });
+      if (df) data = data.filter(function(r) { return r['部门'] === df; });
+      if (sf) data = data.filter(function(r) { return r['状态'] === sf; });
+      if (from) data = data.filter(function(r) { return r['培训日期'] && r['培训日期'] >= from; });
+      if (to) data = data.filter(function(r) { return r['培训日期'] && r['培训日期'] <= to; });
+      // 优先用 SheetJS 导出 Excel
+      if (typeof XLSX !== 'undefined') {
+        var header = ['ID','姓名','部门','培训项目','培训机构','培训类型','培训日期','费用','地点','学习目标','承诺产出','状态','总结内容','行动计划','可衡量指标','培训前评分','培训后评分','30天执行','回访日期','回访详情','30天自评','自评日期','90天自评','90天自评日期','评估分数','评估日期','评估意见','推荐程度','HR备注'];
+        var rows = data.map(function(r) {
+          return [r.ID,r['员工'],r['部门'],r['培训项目'],r['培训机构'],r['培训类型'],r['培训日期'],r['费用'],r['地点'],r['学习目标'],r['承诺产出'],r['状态'],r['总结内容'],r['行动计划'],r['可衡量指标'],r['培训前评分'],r['培训后评分'],r['30天执行'],r['回访日期'],r['回访详情'],r['30天自评内容'],r['自评提交日期'],r['90天自评内容'],r['90天自评日期'],r['评估分数'],r['评估日期'],r['评估意见'],r['推荐程度'],r['HR备注']];
+        });
+        var ws = XLSX.utils.aoa_to_sheet([header].concat(rows));
+        var wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, '培训记录');
+        var suffix = (sf || df) ? ('_' + (sf || df)) : '';
+        XLSX.writeFile(wb, '培训记录' + suffix + '_' + new Date().toISOString().slice(0,10) + '.xlsx');
+        toast('已导出 ' + data.length + ' 条记录（Excel）');
+        return;
+      }
+      // CSV降级
+      var csv = '\uFEFFID,姓名,部门,培训项目,培训机构,类型,日期,费用,地点,状态,HR备注\n';
+      data.forEach(function(r) {
+        csv += [r.ID,r['员工'],r['部门'],r['培训项目'],r['培训机构'],r['培训类型'],r['培训日期'],r['费用'],r['地点'],r['状态'],r['HR备注']].map(function(v) { return '"'+(v||'')+'"'; }).join(',') + '\n';
+      });
+      var blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+      var objUrl = URL.createObjectURL(blob);
+      var a = document.createElement('a'); a.href = objUrl; a.download = '培训记录.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(objUrl);
+      toast('已导出 ' + data.length + ' 条记录');
+    });
+    if (importRecordsBtn) importRecordsBtn.addEventListener('click', function() { openImportRecordsModal(); });
+  }
+  bindAllPageEvents();
 
   function openEdit(id) {
     var r = findRecord(id);
@@ -2850,7 +2900,8 @@ function viewSummary(id) {
     }
   }
 
-  document.getElementById('exportBtn').addEventListener('click', function() {
+  // ─── exportBtn事件已在bindAllPageEvents()中绑定，以下为导出工具函数 ───
+  function doExport() {
     // 根据当前筛选条件导出，而不是全量
     var data = ALL_DATA.slice();
     var q = document.getElementById('f-q').value.toLowerCase();
@@ -2907,12 +2958,9 @@ function viewSummary(id) {
     document.body.removeChild(a);
     URL.revokeObjectURL(objUrl);
     toast('已导出 ' + data.length + ' 条记录');
-  });
+  }
 
-  // ─── 培训记录批量导入（Excel） ───
-  document.getElementById('importRecordsBtn').addEventListener('click', function() {
-    openImportRecordsModal();
-  });
+  // ─── importRecordsBtn事件已在bindAllPageEvents()中绑定 ───
 
   function openImportRecordsModal() {
     var h = '<div style="margin-bottom:16px">';
