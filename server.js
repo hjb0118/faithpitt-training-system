@@ -10,17 +10,21 @@ const dbAdapter = require('./db-adapter');
 const https = require('https');
 
 const PORT = 3000;
-const DATA_FILE = path.join(__dirname, 'data.json');
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 const BACKUP_DIR = path.join(__dirname, 'backups');
 
-// ─── 企业微信 OAuth 配置 ───
+// ─── 加载本地配置（config.local.json 不提交git） ───
+var LOCAL_CONFIG = {};
+try { LOCAL_CONFIG = JSON.parse(fs.readFileSync(path.join(__dirname, 'config.local.json'), 'utf-8')); } catch(e) {}
+
+// ─── 企业微信 OAuth 配置（优先从config.local.json读取） ───
+var _wc = LOCAL_CONFIG.wecom || {};
 const WECOM = {
-  corpId: 'ww7133ea1ef30964de',
-  agentId: '1000155',
-  secret: '3_g-CefXpktPK3UhUko49Qi7grP_nK-oQFJTZTP4mh8',
-  callbackToken: '6lrcDmGP1nh2i2An83DhS5JcWal5eI',
-  encodingAESKey: 'flGXRz814dbcOE3jLgRgv3bljSZ1WtqqiKjWb48Ix9a',
+  corpId: _wc.corpId || '',
+  agentId: _wc.agentId || '',
+  secret: _wc.secret || '',
+  callbackToken: _wc.callbackToken || '',
+  encodingAESKey: _wc.encodingAESKey || '',
   getTokenUrl: function() {
     return 'https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=' + this.corpId + '&corpsecret=' + this.secret;
   },
@@ -120,13 +124,12 @@ function checkApiRateLimit(ip) {
 }
 
 // ─── 错误日志 ───
-const fs_error = require('fs');
 const ERROR_LOG_FILE = path.join(__dirname, 'error.log');
 
 function logError(type, message, stack) {
   var time = new Date().toISOString();
   var line = '[' + time + '] ' + type + ': ' + message + (stack ? '\n' + stack : '') + '\n';
-  fs_error.appendFile(ERROR_LOG_FILE, line, function() {});
+  fs.appendFile(ERROR_LOG_FILE, line, function() {});
 }
 
 // ─── 登录失败锁定 ───
@@ -256,10 +259,10 @@ var VALID_TRANSITIONS = {
   '待审批': ['已通过', '已驳回', '学习中', '已撤回'],
   '已驳回': ['待审批'],
   '已撤回': ['待审批'],
-  '已通过': ['学习中', '总结已提交', '已完成'],
-  '学习中': ['总结已提交', '已完成'],
-  '总结已提交': ['待评审', '已完成'],  // 需HR评审后才能进入30天回访
-  '待评审': ['30天已回访', '已完成', '学习中'],  // 评审通过→30天回访，不合格→回退学习
+  '已通过': ['学习中', '总结已提交'],
+  '学习中': ['总结已提交'],
+  '总结已提交': ['待评审'],
+  '待评审': ['30天已回访', '学习中'],  // 评审通过→30天回访，不合格→回退学习
   '30天已回访': ['已完成'],
   '已完成': []  // 终态，不可回退
 };
@@ -1361,7 +1364,7 @@ var server = http.createServer(function(req, res) {
               path: '/chat/completions',
               method: 'POST',
               headers: {
-                'Authorization': 'Bearer sk-e299f5a28a3c4f3389dca887063d417a',
+                'Authorization': 'Bearer ' + (LOCAL_CONFIG.deepseek_api_key || ''),
                 'Content-Type': 'application/json',
                 'Content-Length': Buffer.byteLength(postData)
               }
