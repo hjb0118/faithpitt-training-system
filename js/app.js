@@ -615,10 +615,10 @@
       document.getElementById('set-backup').style.display = isHR ? '' : 'none';
       document.getElementById('set-autostart').style.display = isHR ? '' : 'none';
       document.getElementById('set-report').style.display = isHR ? '' : 'none';
+      document.getElementById('set-sync').style.display = isHR ? '' : 'none';
       document.getElementById('set-status').style.display = isHR ? '' : 'none';
       // 副标题也按角色调整
-      var setPage = document.getElementById('p-set');
-      var setSubtitle = setPage.querySelector('.pd');
+      var setSubtitle = document.getElementById('setSubtitle');
       if (setSubtitle) setSubtitle.textContent = isHR ? '修改密码、数据备份等' : '修改您的登录密码';
       document.getElementById('serverUrl').textContent = API;
       document.getElementById('connStatus').textContent = '检查中...';
@@ -4229,6 +4229,33 @@ function viewSummary(id) {
   }
 
 
+
+  // ─── 云端数据同步 ───
+  document.getElementById('pullCloudBtn').addEventListener('click', function() {
+    var btn = document.getElementById('pullCloudBtn');
+    var result = document.getElementById('syncResult');
+    btn.disabled = true; btn.textContent = '⏳ 正在从云端拉取...';
+    result.textContent = ''; result.style.color = '#999';
+    apiPost('pullFromCloud', {}).then(function(r) {
+      btn.disabled = false; btn.textContent = '⬇️ 拉取云端数据';
+      if (r.ok) {
+        result.textContent = '✅ ' + r.msg;
+        result.style.color = 'var(--success)';
+        toast('数据已从云端拉取');
+        refreshData();
+      } else {
+        result.textContent = '❌ ' + (r.msg || '拉取失败');
+        result.style.color = 'var(--danger)';
+        toast(r.msg || '拉取失败');
+      }
+    });
+  });
+  document.getElementById('pushCloudBtn').addEventListener('click', function() {
+    var msg = '推送功能需重启服务，请让AI助手执行同步。\n\n手动方式：双击运行 sync_to_server.py';
+    toast(msg);
+    document.getElementById('syncResult').textContent = '💡 ' + msg.replace(/\n/g, ' ');
+    document.getElementById('syncResult').style.color = '#999';
+  });
 
   // ─── 修改密码 ───
   document.getElementById('changePwdBtn').addEventListener('click', function() {

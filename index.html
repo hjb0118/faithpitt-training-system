@@ -277,7 +277,7 @@
 
     <div class="pg" id="p-set">
       <div class="pt">系统设置</div>
-      <div class="pd">修改密码、数据备份等</div>
+      <div class="pd" id="setSubtitle">修改密码、数据备份等</div>
       <div class="cd" id="set-pwd">
         <div class="cd-t">修改密码</div>
         <div class="fgd" style="max-width:380px">
@@ -314,6 +314,15 @@
         <div class="cd-t">导出培训报告</div>
         <div class="cd-s">生成一份可打印的培训报告，包含统计数据、待办事项、完整记录，适合存档或汇报使用</div>
         <button class="bt btp" id="exportReportBtn"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg> 生成培训报告</button>
+      </div>
+      <div class="cd" id="set-sync">
+        <div class="cd-t">☁️ 云端数据同步</div>
+        <div class="cd-s">从云服务器拉取最新数据覆盖本地，或推送本地数据到云端</div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <button class="bt btp" id="pullCloudBtn"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> 拉取云端数据</button>
+          <button class="bt bts" id="pushCloudBtn"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg> 推送到云端</button>
+        </div>
+        <div id="syncResult" style="margin-top:8px;font-size:13px;color:#999"></div>
       </div>
       <div class="cd" id="set-status">
         <div class="cd-t">服务器状态</div>

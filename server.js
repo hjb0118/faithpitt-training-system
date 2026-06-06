@@ -1397,6 +1397,39 @@ var server = http.createServer(function(req, res) {
             return;
           }
 
+          // ─── 从云端拉取数据库（仅HR） ───
+          if (action === 'pullFromCloud') {
+            if (!isHR) { sendJson(res, { ok: false, msg: '无权限' }); return; }
+            try {
+              dbAdapter.close();
+              var pyLines = [
+                'import paramiko',
+                'ssh = paramiko.SSHClient()',
+                'ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())',
+                'ssh.connect("47.96.158.178", port=22, username="root", password="REN01250099q", timeout=15)',
+                'sftp = ssh.open_sftp()',
+                'sftp.get("/root/training-system/training.db", ' + JSON.stringify(path.join(__dirname, 'training.db')) + ')',
+                'sftp.close()',
+                'ssh.close()',
+                'print("ok")'
+              ];
+              var tmpFile = path.join(__dirname, '_pull_cloud.py');
+              fs.writeFileSync(tmpFile, pyLines.join('\n'), 'utf8');
+              const { execSync } = require('child_process');
+              execSync('python ' + tmpFile, { encoding: 'utf8', timeout: 30000 });
+              fs.unlinkSync(tmpFile);
+              try { fs.unlinkSync(path.join(__dirname, 'training.db-wal')); } catch(e) {}
+              try { fs.unlinkSync(path.join(__dirname, 'training.db-shm')); } catch(e) {}
+              dbAdapter.init();
+              var refreshed = dbAdapter.readData();
+              sendJson(res, { ok: true, msg: '数据已从云端拉取，共 ' + refreshed.users.length + ' 个用户、' + refreshed.records.length + ' 条记录' });
+            } catch(e) {
+              try { dbAdapter.init(); } catch(e2) {}
+              sendJson(res, { ok: false, msg: '拉取失败：' + e.message });
+            }
+            return;
+          }
+
           sendJson(res, { ok: false, msg: 'unknown action' });
         } catch (e) {
           sendJson(res, { ok: false, msg: 'parse error' });

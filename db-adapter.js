@@ -221,12 +221,17 @@ function close() {
   dbModule.closeDatabase();
 }
 
+function init() {
+  dbModule.initDatabase();
+}
+
 module.exports = {
   readData: readData,
   safeWrite: safeWrite,
   addLog: addLog,
   getDb: getDb,
   close: close,
+  init: init,
 
   // 直接暴露db的方法，方便使用
   getAllRecords: dbModule.getAllRecords,
