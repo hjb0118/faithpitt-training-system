@@ -310,6 +310,16 @@ python sync_to_server.py
   4. DATA_FILE死代码 → 删除
   5. fs_error冗余引用 → 删除
 
+### 2026-06-05 系统功能增强
+- 系统设置页新增"云端数据同步"：拉取云端数据按钮（pullFromCloud API，paramiko下载+热重载数据库）
+- 骨架屏Bug两连修：所有记录页按钮失效（bindAllPageEvents）+ 员工端我的记录卡死（Tab样式移入renderMy）
+
+### 2026-08-24 附件下载损坏修复
+- 问题：大附件（33MB/181MB PPT）下载后文件损坏
+- 根因：res.end(fs.readFileSync())一次性发送大文件被截断
+- 修复：改用 fs.createReadStream().pipe(res) 流式传输 + Content-Length头
+- 验证：下载字节数与磁盘完全一致
+
 ---
 
 ## 九、当前用户数据（截至2026-06-04）
