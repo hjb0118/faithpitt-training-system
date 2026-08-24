@@ -525,11 +525,14 @@ var server = http.createServer(function(req, res) {
       // 可预览的文件类型使用 inline，其他使用 attachment
       var previewExts = ['.pdf', '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp'];
       var disposition = previewExts.includes(ext) ? 'inline' : 'attachment';
+      var fstat = fs.statSync(fpath);
       res.writeHead(200, {
         'Content-Type': fileTypes[ext] || 'application/octet-stream',
+        'Content-Length': fstat.size,
         'Content-Disposition': disposition + '; filename="' + encodeURIComponent(fname) + '"'
       });
-      res.end(fs.readFileSync(fpath));
+      // 流式发送，避免大文件一次性读入内存导致截断损坏
+      fs.createReadStream(fpath).pipe(res);
     } else {
       res.writeHead(404);
       res.end('Not Found');
