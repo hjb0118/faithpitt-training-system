@@ -695,6 +695,8 @@
       var r = filtered[k];
       var act = '';
       if (r['状态'] === '已通过') act += '<button class="bt bts" data-a="sum" data-id="' + r.ID + '">提交总结</button> ';
+      // 退回重提：学习中且已有总结（评审退回）→ 修改总结并重新提交（2026-09-23 新增）
+      if (r['状态'] === '学习中') act += '<button class="bt bts btp" data-a="sum" data-id="' + r.ID + '" style="font-weight:600">' + (r['总结内容'] ? '修改总结并重提' : '提交总结') + '</button> ';
       if (r['状态'] === '待审批') act += '<button class="bt bts" data-a="edit" data-id="' + r.ID + '">编辑</button> <button class="bt bts" data-a="withdraw" data-id="' + r.ID + '" style="color:var(--warning);border-color:var(--warning)">撤回</button> ';
       if (r['状态'] === '已撤回') act += '<button class="bt bts btp" data-a="resubmit" data-id="' + r.ID + '" style="font-weight:600">重新提交</button> ';
       if (r['状态'] === '待评审') {
@@ -765,6 +767,10 @@
       // 员工端：驳回时显示驳回原因
       if (r['状态'] === '已驳回' && r['HR备注']) {
         statusBadge += '<div style="font-size:11px;color:var(--danger);margin-top:3px;max-width:120px;white-space:normal">原因：' + esc(r['HR备注']) + '</div>';
+      }
+      // 员工端：总结被退回（学习中+已有总结）时显示退回原因（2026-09-23 新增）
+      if (r['状态'] === '学习中' && r['总结内容'] && r['HR备注']) {
+        statusBadge += '<div style="font-size:11px;color:var(--warning-dark);margin-top:3px;max-width:120px;white-space:normal">退回原因：' + esc(r['HR备注']) + '</div>';
       }
       // 员工端：已提交总结后可查看自己的总结
       if (r['状态'] !== '待审批' && r['状态'] !== '已通过' && r['总结内容']) {
@@ -1422,13 +1428,54 @@ function viewSummary(id) {
     var outEl = document.getElementById('s-orig-out');
     if (goalEl) goalEl.textContent = r['学习目标'] || '（未填写）';
     if (outEl) outEl.textContent = r['承诺产出'] || '（未填写）';
-    document.getElementById('s-gain').value = '';
-    document.getElementById('s-before').value = '';
-    document.getElementById('s-after').value = '';
-    document.getElementById('s-plan').value = '';
-    document.getElementById('s-met').value = '';
-    document.getElementById('s-support').value = '';
+
+    // ── 退回重提：回填上次提交的总结内容，员工可直接编辑后重新提交（2026-09-23 新增）───
+    var rawSum = r['总结内容'] || '';
+    var isResubmit = !!rawSum;
+    // 按 sumSubmit 的组装格式解析各段：【最大收获】【培训前了解程度】x/5【培训后提升程度】x/5【怎么用到工作中】【需要的支持】
+    function extractSumTag(tag) {
+      var re = new RegExp('【' + tag + '】[^\\S\\n]*\\n([\\s\\S]*?)(?=\\n\\n【|$)');
+      var m = rawSum.match(re);
+      return m ? m[1].trim() : '';
+    }
+    var fGain = extractSumTag('最大收获');
+    var fPlan = extractSumTag('怎么用到工作中');
+    var fSupport = extractSumTag('需要的支持');
+    var mBefore = rawSum.match(/【培训前了解程度】\s*(\d)/);
+    var mAfter = rawSum.match(/【培训后提升程度】\s*(\d)/);
+    // 非标准格式（如导入的任意文本总结）：原文整体放进"最大收获"，避免内容丢失
+    if (!fGain && rawSum && !mBefore) fGain = rawSum;
+
+    document.getElementById('s-gain').value = fGain;
+    document.getElementById('s-before').value = mBefore ? mBefore[1] : '';
+    document.getElementById('s-after').value = mAfter ? mAfter[1] : '';
+    document.getElementById('s-plan').value = fPlan;
+    document.getElementById('s-met').value = r['可衡量指标'] || '';
+    document.getElementById('s-support').value = fSupport;
     document.getElementById('s-files').innerHTML = '';
+    // 已有附件提示（重新提交时保留）
+    if (r._files && r._files.length) {
+      var fh = '';
+      for (var fi = 0; fi < r._files.length; fi++) {
+        fh += '<div class="file-item">📎 已上传：' + esc(r._files[fi].name) + '</div>';
+      }
+      document.getElementById('s-files').innerHTML = fh;
+    }
+
+    // 退回提示条（动态插入表单上方）
+    var oldNotice = document.getElementById('sumBackNotice');
+    if (oldNotice) oldNotice.parentNode.removeChild(oldNotice);
+    if (isResubmit) {
+      var notice = document.createElement('div');
+      notice.id = 'sumBackNotice';
+      notice.style.cssText = 'background:#FFF3E0;border:1px solid #FFB74D;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:13px;color:#E65100;line-height:1.7';
+      notice.innerHTML = '<b>📝 总结已退回，请修改后重新提交。</b>' + (r['HR备注'] ? '<br>退回原因：' + esc(r['HR备注']) : '') + '<br><span style="color:#8A6D2B">下方已回填你上次提交的内容，直接修改即可，重新提交后 HR 会再次评审。</span>';
+      var fgdEl = document.getElementById('s-proj').closest('.fgd');
+      if (fgdEl && fgdEl.parentElement) fgdEl.parentElement.insertBefore(notice, fgdEl);
+      document.getElementById('sumSubmit').textContent = '重新提交总结';
+    } else {
+      document.getElementById('sumSubmit').textContent = '提交总结';
+    }
     go('summary');
   }
 
