@@ -447,6 +447,7 @@ sftp.put('本地/uploads/*', '/root/training-system/uploads/')
 ### 8.5 pullFromCloud 的实现要点（踩过坑）
 
 ⚠️ 2026-09-23 起，云端 SSH 密码**不再硬编码**，统一从 `config.local.json` 的 `server_pass` 读取（`sync_to_server.py` 同）。未配置时接口会明确报错。
+⚠️ 2026-09-23 修复：下载前**先在云端执行 `wal_checkpoint(TRUNCATE)`**（远程跑 python3）。否则最新数据还留在云端 `training.db-wal` 里，只下载主库会拉到旧快照（实测踩坑：张磊的总结一度"拉不到"）。
 
 `server.js` 中拉取云端数据的 Python 调用有特殊处理：
 
@@ -507,7 +508,7 @@ spawnSync(pyExe, [tmpFile], { stdio: ['ignore', logFd, logFd], timeout: 120000 }
 
 - **用户**：34 个账号（2026-09-23 已将全部员工账号密码统一重置为 `123456`，`HR`/`任奕晨` 两个 HR 账号未动）
 - **培训记录**：24 条，最新 ID `R64`（2026-09-23 删除「高管领导力」培训 25 条：原 R19~R42、R47，云端已同步，云端旧库备份于 `backups/cloud_before_push_2026-09-23.db`）
-- **记录状态分布**：已通过 17、30天已回访 6、已完成 1
+- **记录状态分布**：已通过 16、学习中 1（张磊 R52 总结已退回待修改）、30天已回访 6、已完成 1
 - **操作日志**：404 条｜**附件**：10 个｜**部门**：5 个
 
 ### 用户名单（按部门）
@@ -642,6 +643,7 @@ git add 具体文件 && git commit -m "描述" && git push origin main
 | 2026-08-24 | - | **修复大附件下载损坏**（改流式传输 + Content-Length） |
 | 2026-09-23 | - | 修复 pullFromCloud 的 EBUSY；建立「分期培训」登记规范；「客涨价培训战营·第1期」建档 17 人 |
 | 2026-09-23 | - | **安全加固**：静态文件白名单（修复敏感文件任意下载）；封堵 register 越权建号；SSH 密码外置到 config.local.json；顺带恢复 `/api/error-report`、`/api/v1` 路由 |
+| 2026-09-23 | - | **bug 修复 x2**：状态机补「评审退回」路径（`总结已提交→学习中`，此前退回必失败）；pullFromCloud 下载前先云端 WAL checkpoint（否则拉回旧快照）；张磊 R52 退回完成，两端数据归一 |
 
 ---
 
@@ -664,6 +666,7 @@ git add 具体文件 && git commit -m "描述" && git push origin main
 | 13 | Excel 批量导入记录失效（前端 POST `/api/apply`，服务端无此端点） | 方案B 导入不可用（方案A 正常） | 改为调 `addRecord` 接口 |
 | 14 | `运行部署.bat` 调用的 `deploy_all.py` 不存在 | 双击无效 | 直接 `node server.js` 或修 bat |
 | 15 | 本地 `node` 为 v24，而 `better-sqlite3` 按 Node 22 编译 | 用默认 `node server.js` 报 ERR_DLOPEN_FAILED | 用 Node 22 启动：`C:\Users\PC\.workbuddy\binaries\node\versions\22.22.2-3\node.exe server.js`（2026-09-23 已按 Node 22 重建模块并如此启动） |
+| 16 | ~~状态机缺「评审退回」路径 + ~~pullFromCloud 不做云端 WAL checkpoint（拉回旧快照）~~ | 均已于 2026-09-23 **修复**（张磊 R52 实测复现并验证） | 无 |
 
 ---
 

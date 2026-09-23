@@ -1417,6 +1417,8 @@ var server = http.createServer(function(req, res) {
                 'ssh = paramiko.SSHClient()',
                 'ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())',
                 'ssh.connect("47.96.158.178", port=22, username="root", password=' + JSON.stringify(sshPass) + ', timeout=15)',
+                // 先在云端做 WAL checkpoint：最新数据在 training.db-wal 里，直接下载主库会拿旧快照（2026-09-23 实测踩坑）
+                'ssh.exec_command("echo ' + Buffer.from("import sqlite3\ncon = sqlite3.connect('/root/training-system/training.db')\ncon.execute('PRAGMA wal_checkpoint(TRUNCATE)')\ncon.commit()\nprint('ckpt ok')\n").toString('base64') + ' | base64 -d | python3")[1].channel.recv_exit_status()',
                 'sftp = ssh.open_sftp()',
                 'sftp.get("/root/training-system/training.db", ' + JSON.stringify(path.join(__dirname, 'training.db')) + ')',
                 'sftp.close()',
