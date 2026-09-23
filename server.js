@@ -1418,15 +1418,42 @@ var server = http.createServer(function(req, res) {
               ];
               var tmpFile = path.join(__dirname, '_pull_cloud.py');
               fs.writeFileSync(tmpFile, pyLines.join('\n'), 'utf8');
-              const { execSync } = require('child_process');
-              execSync('python ' + tmpFile, { encoding: 'utf8', timeout: 30000 });
-              fs.unlinkSync(tmpFile);
+              const { spawnSync } = require('child_process');
+              // 依次尝试候选解释器执行脚本
+              // 注意：stdio 必须用文件句柄接管，不能用默认 pipe——服务以重定向方式启动时管道创建会 EBUSY
+              var logFile = path.join(__dirname, '_pull_cloud.log');
+              var candidates = [
+                path.join(os.homedir(), '.workbuddy', 'binaries', 'python', 'envs', 'default', 'Scripts', 'python.exe'),
+                'C:\\Users\\PC\\.workbuddy\\binaries\\python\\envs\\default\\Scripts\\python.exe',
+                'python'
+              ];
+              var pyExe = null;
+              for (var ci = 0; ci < candidates.length; ci++) {
+                var logFd;
+                try { logFd = fs.openSync(logFile, 'w'); } catch(e) { logFd = 'ignore'; }
+                var rr = spawnSync(candidates[ci], [tmpFile], { stdio: ['ignore', logFd, logFd], timeout: 120000 });
+                try { if (typeof logFd === 'number') fs.closeSync(logFd); } catch(e) {}
+                if (rr.status === 0) { pyExe = candidates[ci]; break; }
+                if (rr.error && (rr.error.code === 'ENOENT' || rr.error.code === 'EACCES')) continue;
+              }
+              if (!pyExe) {
+                var logText = '';
+                try { logText = fs.readFileSync(logFile, 'utf8').trim().substring(0, 300); } catch(e) {}
+                try { fs.unlinkSync(tmpFile); } catch(e) {}
+                try { fs.unlinkSync(logFile); } catch(e) {}
+                dbAdapter.init();
+                sendJson(res, { ok: false, msg: '拉取失败：' + (logText || '请确认已安装 paramiko（pip install paramiko）') });
+                return;
+              }
+              try { fs.unlinkSync(tmpFile); } catch(e) {}
+              try { fs.unlinkSync(logFile); } catch(e) {}
               try { fs.unlinkSync(path.join(__dirname, 'training.db-wal')); } catch(e) {}
               try { fs.unlinkSync(path.join(__dirname, 'training.db-shm')); } catch(e) {}
               dbAdapter.init();
               var refreshed = dbAdapter.readData();
               sendJson(res, { ok: true, msg: '数据已从云端拉取，共 ' + refreshed.users.length + ' 个用户、' + refreshed.records.length + ' 条记录' });
             } catch(e) {
+              try { fs.unlinkSync(path.join(__dirname, '_pull_cloud.py')); } catch(e3) {}
               try { dbAdapter.init(); } catch(e2) {}
               sendJson(res, { ok: false, msg: '拉取失败：' + e.message });
             }
