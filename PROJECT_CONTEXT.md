@@ -2,7 +2,7 @@
 
 > **用途**：本文件是「凡碧诗培训管理系统」的完整交接文档。接手方（AI 或开发者）读完本文件即可独立运维整个系统。
 > **最后更新**：2026-09-23
-> **维护要求**：任何代码/数据/配置变更后，**必须同步更新本文件** + 记录到 WorkBuddy 记忆。
+> **维护要求**：任何代码/数据/配置变更后，必须：①检查 ②部署（git push 自动上云 + 云端验证）③写 `logs/YYYY-MM-DD.md` 当天日志 ④同步更新本文件与 `MEMORY.md`（AI 快速上手总记忆）。
 
 ---
 
@@ -115,6 +115,8 @@ safeWrite(db);
 | `package.json` | - | 唯一依赖：better-sqlite3 | ✅ |
 | `.github/workflows/deploy.yml` | 44 | CI/CD 自动部署 | ✅ |
 | `PROJECT_CONTEXT.md` | - | **本文件** | ✅ |
+| `MEMORY.md` | - | AI 总记忆（架构概括 + 工作流，新会话先读） | ✅ |
+| `logs/` | - | 每日工作日志（每次变更追加当天记录） | ✅ |
 
 ### 数据与配置（不入 git）
 
@@ -355,6 +357,7 @@ id_counters(name PK, value)
 | Token | 64 位 hex，24h 有效，请求自动续期 | server.js `TOKENS` |
 | CORS | 白名单（localhost / 127.0.0.1 / 云端 IP / 局域网 IP 自动探测） | server.js `ALLOWED_ORIGINS` |
 | 路径穿越防护 | 上传与下载两处都校验 `startsWith` | server.js |
+| 静态文件白名单 | 仅 `index.html` / `css/` / `js/` 公开，其余路径一律 404（防任意文件下载，2026-09-23 加） | server.js 静态服务 |
 | 输入消毒 | `sanitize(str, maxLen)` 全字段覆盖 | server.js |
 | 文件上传限制 | 白名单扩展名 + 单文件 ≤ 10MB | server.js |
 
@@ -442,6 +445,8 @@ sftp.put('本地/uploads/*', '/root/training-system/uploads/')
 | 注意 | **该环境可能被重置**，paramiko 消失时执行 `pip install paramiko` |
 
 ### 8.5 pullFromCloud 的实现要点（踩过坑）
+
+⚠️ 2026-09-23 起，云端 SSH 密码**不再硬编码**，统一从 `config.local.json` 的 `server_pass` 读取（`sync_to_server.py` 同）。未配置时接口会明确报错。
 
 `server.js` 中拉取云端数据的 Python 调用有特殊处理：
 
@@ -636,6 +641,7 @@ git add 具体文件 && git commit -m "描述" && git push origin main
 | 2026-06-05 | - | 全面审查 + 31 项功能测试；**密钥外部化到 config.local.json**；状态机收紧；系统设置页加「云端数据同步」；骨架屏 Bug 两连修 |
 | 2026-08-24 | - | **修复大附件下载损坏**（改流式传输 + Content-Length） |
 | 2026-09-23 | - | 修复 pullFromCloud 的 EBUSY；建立「分期培训」登记规范；「客涨价培训战营·第1期」建档 17 人 |
+| 2026-09-23 | - | **安全加固**：静态文件白名单（修复敏感文件任意下载）；封堵 register 越权建号；SSH 密码外置到 config.local.json；顺带恢复 `/api/error-report`、`/api/v1` 路由 |
 
 ---
 
@@ -652,6 +658,12 @@ git add 具体文件 && git commit -m "描述" && git push origin main
 | 7 | `budgets` 表为空、`evaluations` 表仅 1 行 | 功能已弃用 | 保留不影响 |
 | 8 | 企微 OAuth 深度集成 | 卡 ICP 备案域名 | 需公司备案域名解析到 47.96.158.178 |
 | 9 | `review_score/review_comment/review_tag` 字段已弃用 | 无 | 保留兼容历史数据 |
+| 10 | ~~静态文件服务可任意下载 `config.local.json` / `training.db` / `tokens.json` / `backups/`~~ | 已于 2026-09-23 **修复**（静态文件白名单） | 部署上云后可实测 `GET /training.db` 应返回 404 |
+| 11 | ~~`register` 可用 `_role:'setup'` 越权创建 HR 账号~~ | 已于 2026-09-23 **修复** | 部署上云后可复测 |
+| 12 | 服务器 root 密码曾明文硬编码在 server.js / sync_to_server.py 并推送 GitHub | **git 历史仍可见，视为已泄露** | **尽快轮换服务器密码**，换完同步更新 config.local.json 和 GitHub Secrets（SERVER_PASS） |
+| 13 | Excel 批量导入记录失效（前端 POST `/api/apply`，服务端无此端点） | 方案B 导入不可用（方案A 正常） | 改为调 `addRecord` 接口 |
+| 14 | `运行部署.bat` 调用的 `deploy_all.py` 不存在 | 双击无效 | 直接 `node server.js` 或修 bat |
+| 15 | 本地 `node` 为 v24，而 `better-sqlite3` 按 Node 22 编译 | 用默认 `node server.js` 报 ERR_DLOPEN_FAILED | 用 Node 22 启动：`C:\Users\PC\.workbuddy\binaries\node\versions\22.22.2-3\node.exe server.js`（2026-09-23 已按 Node 22 重建模块并如此启动） |
 
 ---
 

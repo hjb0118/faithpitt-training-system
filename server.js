@@ -480,12 +480,15 @@ var server = http.createServer(function(req, res) {
     return;
   }
 
-  // ─── 静态文件（index.html 等） ───
-  if (pathname !== '/api' && !pathname.startsWith('/uploads/')) {
-    var filePath = pathname === '/' ? '/index.html' : pathname;
-    filePath = path.join(__dirname, filePath);
-    // 防止路径穿越
-    if (!filePath.startsWith(__dirname)) { res.writeHead(403); res.end('Forbidden'); return; }
+  // ─── 静态文件（白名单放行，其余一律404，防止任意文件下载） ───
+  // 仅允许 index.html、css/、js/ 三个公开路径；config.local.json、training.db、tokens.json、backups/ 等敏感文件绝不公开
+  if (!pathname.startsWith('/api') && !pathname.startsWith('/uploads/')) {
+    var filePath = pathname === '/' ? path.join(__dirname, 'index.html') : path.resolve(__dirname, '.' + pathname);
+    // 白名单 + 路径穿越防护（先解析真实路径再校验，防 /js/../xxx 式穿透）
+    var cssRoot = path.join(__dirname, 'css') + path.sep;
+    var jsRoot = path.join(__dirname, 'js') + path.sep;
+    var staticAllowed = filePath === path.join(__dirname, 'index.html') || filePath.startsWith(cssRoot) || filePath.startsWith(jsRoot);
+    if (!staticAllowed) { res.writeHead(404); res.end('Not Found'); return; }
     var ext = path.extname(filePath);
     var types = { '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript', '.json': 'application/json', '.png': 'image/png', '.jpg': 'image/jpeg', '.ico': 'image/x-icon' };
     fs.readFile(filePath, function(err, data) {
@@ -714,7 +717,8 @@ var server = http.createServer(function(req, res) {
           if (action === 'register') {
             // 用写锁防止竞态条件
             var regDb = readData();
-            if (regDb.users.length > 0 && data._role !== 'setup') {
+            // 仅当用户表为空时允许注册（曾可用 _role:'setup' 绕过本检查越权建号，2026-09-23 封堵）
+            if (regDb.users.length > 0) {
               sendJson(res, { ok: false, msg: 'not first' }); return;
             }
             var rUser = sanitize(data.username, 50);
@@ -1403,13 +1407,16 @@ var server = http.createServer(function(req, res) {
           // ─── 从云端拉取数据库（仅HR） ───
           if (action === 'pullFromCloud') {
             if (!isHR) { sendJson(res, { ok: false, msg: '无权限' }); return; }
+            // 云端 SSH 密码从 config.local.json 读取（不写死在代码里）
+            var sshPass = LOCAL_CONFIG.server_pass || '';
+            if (!sshPass) { sendJson(res, { ok: false, msg: '未配置云端密码：请在 config.local.json 中设置 server_pass' }); return; }
             try {
               dbAdapter.close();
               var pyLines = [
                 'import paramiko',
                 'ssh = paramiko.SSHClient()',
                 'ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())',
-                'ssh.connect("47.96.158.178", port=22, username="root", password="REN01250099q", timeout=15)',
+                'ssh.connect("47.96.158.178", port=22, username="root", password=' + JSON.stringify(sshPass) + ', timeout=15)',
                 'sftp = ssh.open_sftp()',
                 'sftp.get("/root/training-system/training.db", ' + JSON.stringify(path.join(__dirname, 'training.db')) + ')',
                 'sftp.close()',

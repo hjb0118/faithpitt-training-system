@@ -6,19 +6,32 @@
 
 import paramiko
 import os
+import json
 import posixpath
 import time
+
+# 本地项目目录（脚本所在目录）
+LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ========== 配置 ==========
 HOST = '47.96.158.178'
 PORT = 22
 USER = 'root'
-PASS = 'REN01250099q'
 REMOTE_DIR = '/root/training-system'
 PM2_APP = 'training-system'
 
-# 本地项目目录（脚本所在目录）
-LOCAL_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def _load_pass():
+    """服务器密码从 config.local.json 读取（不写死在代码里）"""
+    config_path = os.path.join(LOCAL_DIR, 'config.local.json')
+    try:
+        with open(config_path, encoding='utf-8') as f:
+            return json.load(f).get('server_pass', '')
+    except Exception:
+        return ''
+
+
+PASS = _load_pass()
 
 # 需要同步的文件/目录
 SYNC_FILES = ['server.js', 'index.html', 'tokens.json', 'wechat_notify.js', 'db.js', 'db-adapter.js', 'package.json']
@@ -130,6 +143,12 @@ def main():
     print('  培训系统 → 云服务器 同步工具')
     print('=' * 50)
     print()
+
+    if not PASS:
+        print('[错误] 未找到服务器密码：请在 config.local.json 中设置 server_pass')
+        print('按任意键退出...')
+        input()
+        return
 
     # 1. 连接服务器
     print('[1/3] 连接服务器...')
